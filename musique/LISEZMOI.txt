@@ -1,0 +1,9 @@
+Dépose ici tes musiques libres de droits (mp3, m4a, wav, ogg, flac).
+
+À chaque short, hoopcut en choisit une au hasard et la mixe sous le son du match.
+Pour imposer une musique : --musique chemin/vers/la/musique.mp3
+Pour ne pas en mettre : --sans-musique
+
+Attention : une musique protégée (titre commercial) peut faire bloquer ta vidéo
+sur YouTube, TikTok ou Instagram. Utilise des musiques libres de droits, ou ajoute
+la musique directement dans l'application au moment de publier.

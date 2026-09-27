@@ -1,0 +1,24 @@
+# Vidéos téléchargées, fichiers de travail et vidéos produites
+travail/
+sorties/
+*.mp4
+*.mkv
+*.webm
+*.mov
+
+# Musiques personnelles (droits propres à chacun)
+musique/*
+!musique/LISEZMOI.txt
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
