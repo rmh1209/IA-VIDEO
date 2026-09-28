@@ -10,63 +10,68 @@ Tu donnes un lien YouTube (résumé de match ou compilation) et hoopcut produit 
 
 Il prépare aussi un fichier texte avec un titre, une description et des hashtags prêts à coller au moment de publier.
 
+**L'IA tourne sur ton PC** : gratuite, sans clé, et rien n'est envoyé sur Internet (à part le téléchargement de la vidéo YouTube). Une option permet d'utiliser à la place Gemini, l'IA en ligne de Google (voir plus bas).
+
 ## Comment l'IA choisit les moments
 
 1. **Téléchargement** de la vidéo YouTube.
-2. **L'IA vidéo (Gemini, de Google) regarde toute la vidéo en continu, image et son** : elle voit le mouvement (2 images par seconde) et entend les commentaires et le public. Elle liste chaque action avec :
-   - le type : dunk, 3 points, contre, alley-oop, interception… ;
-   - le joueur et l'équipe ;
-   - le score affiché au tableau ;
-   - une note de spectacle et une note d'importance dans le match ;
-   - les ralentis, qui sont écartés.
-3. **Repérage des changements de plan**, pour couper proprement sans montrer le début de l'action suivante.
-4. **Sélection** : l'outil calcule la meilleure combinaison de clips pour tenir entre 60 et 80 s, fondus compris. Il évite les doublons et varie les joueurs et les types d'action. Un résumé de match reste dans l'ordre chronologique. Une compilation va du moins fort au plus fort.
-5. **Montage** au format 1080×1920 : habillage, fondus, musique, et volume réglé au niveau des réseaux sociaux.
+2. **Repérage des changements de plan** (coupes franches, mais aussi flashs blancs et fondus entre deux actions), pour couper proprement sans montrer le début de l'action suivante.
+3. **L'IA vidéo locale (Qwen3.5-4B) regarde toute la vidéo**, par tranches d'environ 30 secondes calées sur les changements de plan :
+   - elle reçoit les images dans l'ordre et horodatées, que son encodeur vidéo fusionne deux par deux : elle voit le mouvement, pas des photos isolées ;
+   - **Whisper**, une autre IA locale, transcrit les commentaires : noms des joueurs, « à deux mains ! », « contré ! »… ;
+   - elle liste chaque action : type (dunk, 3 points, contre, interception…), équipe, joueur (seulement si son nom est prononcé), note de spectacle.
+4. **Vérifications** des meilleures actions :
+   - l'image du geste décisif est regardée seule : les ralentis, gros plans et images du public sont écartés ;
+   - les plans qui entourent l'action sont vérifiés un par un : le clip reste sur les plans de jeu en vue large, sans le public, le banc ou un ralenti juste avant ou après ;
+   - pour un résumé de match, le tableau de score est lu avant et après l'action : il dit qui a marqué et combien de points (+3 = tir à 3 points) ;
+   - le type d'action annoncé par les commentateurs l'emporte sur celui du modèle. S'il reste un doute sur le type de tir, la vidéo affiche simplement « PANIER » ;
+   - la note finale tient compte du type d'action, de l'enthousiasme des commentateurs et du bruit du public.
+5. **Sélection** : l'outil calcule la meilleure combinaison de clips pour tenir entre 60 et 80 s, fondus compris. Il évite les doublons et varie les joueurs et les types d'action. Un résumé de match reste dans l'ordre chronologique. Une compilation va du moins fort au plus fort.
+6. **Montage** au format 1080×1920 : habillage, fondus, musique, et volume réglé au niveau des réseaux sociaux.
 
-## Installation (une seule fois)
+## Installation (une seule fois, Windows)
 
-1. **Python 3.10 ou plus récent** : https://www.python.org/downloads/. Sur Windows, coche « Add Python to PATH » pendant l'installation.
-2. **FFmpeg**, le moteur de montage :
-   - Windows : `winget install Gyan.FFmpeg`
-   - Mac : `brew install ffmpeg`
-3. **Le projet** : télécharge-le depuis GitHub (bouton « Code » puis « Download ZIP ») et décompresse-le. Ouvre un terminal dans ce dossier.
-4. **Installation des modules** :
-   ```
-   python -m pip install -e .
-   ```
-   Sur Windows, si `python` n'est pas reconnu, remplace-le par `py`.
-5. **Clé Gemini** :
-   - crée-la sur https://aistudio.google.com/apikey ;
-   - copie le fichier `.env.example` en `.env` ;
-   - remplace `colle_ta_cle_ici` par ta clé.
+1. **Python 3.10 ou plus récent** : https://www.python.org/downloads/.
+2. **FFmpeg**, le moteur de montage : ouvre un terminal et tape `winget install Gyan.FFmpeg`.
+3. **Une carte graphique NVIDIA** d'au moins 6 Go (GTX 1660 SUPER ou mieux). Sans elle, utilise l'option Gemini.
+4. **Le projet** : télécharge-le depuis GitHub (bouton « Code » puis « Download ZIP »), puis décompresse-le, par exemple dans un dossier sur ton Bureau.
+5. **Double-clique sur `installer.bat`**. Il prépare Python et télécharge l'IA et ses moteurs (environ 4,5 Go, vérifiés à l'arrivée).
 
-Ferme puis rouvre le terminal après l'installation de FFmpeg.
+Les gros fichiers (IA, vidéos téléchargées, analyses) vont dans `hoopcut-donnees`, dans ton dossier utilisateur (`C:\Users\<ton nom>\hoopcut-donnees`). Ce dossier est hors du Bureau, pour que OneDrive n'essaie pas de les envoyer en ligne. Seuls les shorts terminés arrivent dans le dossier du projet.
 
 ## Utilisation
 
-```
-hoopcut "https://youtu.be/oJd_NbZx9VA"
-```
+**Double-clique sur `hoopcut.bat`**, colle le lien YouTube et appuie sur Entrée. Tu peux aussi glisser une vidéo de ton PC sur `hoopcut.bat`.
 
-La vidéo finale arrive dans le dossier `sorties/`, avec son fichier `.txt` pour la publication. Si la commande `hoopcut` n'est pas reconnue, utilise `python -m hoopcut` à la place.
+Le short arrive dans le dossier `sorties/`, qui s'ouvre tout seul à la fin, avec son fichier `.txt` pour la publication.
 
-Autres exemples :
+### Combien de temps ça prend
+
+Sur une GTX 1660 SUPER, compte **à peu près la durée de la vidéo, voire une fois et demie**. Deux exemples mesurés, montage compris :
+- le résumé ASVEL-Maccabi de 15 min 30 : 16 min ;
+- la compilation de dunks de 10 min, très découpée : 15 min.
+
+La fenêtre affiche l'avancement et le temps restant. Pour une analyse plus fine mais deux fois plus longue, ajoute `--ips 2`.
+
+- L'analyse est gardée : refaire un short de la même vidéo (autre focus, autre musique, autre ordre) ne prend qu'une à deux minutes.
+- Si tu fermes la fenêtre pendant l'analyse, relance simplement : elle reprend là où elle s'était arrêtée.
+
+### Avec des options
+
+Ouvre un terminal dans le dossier du projet (clic droit dans le dossier, « Ouvrir dans le terminal ») :
 
 ```
 # Centré sur un joueur (le nom de famille suffit)
-hoopcut "https://youtu.be/oJd_NbZx9VA" --focus-joueur "Parker"
+.\hoopcut.bat "https://youtu.be/oJd_NbZx9VA" --focus-joueur "Parker"
 
 # Centré sur une équipe, avec ton propre titre
-hoopcut "https://youtu.be/oJd_NbZx9VA" --focus-equipe "ASVEL" --titre "L'ASVEL EN FEU"
+.\hoopcut.bat "https://youtu.be/oJd_NbZx9VA" --focus-equipe "ASVEL" --titre "L'ASVEL EN FEU"
 
 # Compilation : la plus belle action en premier pour accrocher
-hoopcut "https://youtu.be/ORfjgE6n2Pc" --ordre accroche
+.\hoopcut.bat "https://youtu.be/ORfjgE6n2Pc" --ordre accroche
 
 # Plusieurs vidéos d'un coup
-hoopcut "https://youtu.be/..." "https://youtu.be/..." ma_video.mp4
-
-# Essai gratuit sans clé Gemini (repère les moments au volume sonore, sans comprendre le jeu)
-hoopcut ma_video.mp4 --sans-ia
+.\hoopcut.bat "https://youtu.be/..." "https://youtu.be/..." ma_video.mp4
 ```
 
 ### Musique
@@ -77,8 +82,6 @@ Dépose tes musiques **libres de droits** dans le dossier `musique/`. hoopcut en
 - `--sans-musique` n'en met aucune.
 - `--volume-musique 0.5` monte la musique.
 - `--volume-original 0` coupe le son du match pour ne garder que la musique.
-
-Si la vidéo source contient déjà une musique (fréquent dans les compilations), l'outil te le signale.
 
 ### Principales options
 
@@ -93,33 +96,44 @@ Si la vidéo source contient déjà une musique (fréquent dans les compilations
 | `--zoom 1.3` | Agrandit la vidéo en rognant les côtés. |
 | `--couleur "#FF7A00"` | Couleur d'accent (étiquette, score, légende). |
 | `--sans-score` | N'affiche pas le score. |
+| `--sans-commentaires` | Ne transcrit pas les commentaires : un peu plus rapide, mais les noms de joueurs sont perdus. |
+| `--ia gemini` | Utilise Gemini (en ligne) au lieu de l'IA locale. |
 | `--analyse-seulement` | Affiche les actions repérées, sans monter la vidéo. |
-| `--reanalyser` | Refait l'analyse IA au lieu de réutiliser la précédente. |
+| `--reanalyser` | Refait l'analyse au lieu de réutiliser la précédente. |
 
-La liste complète s'affiche avec `hoopcut --help`.
+La liste complète s'affiche avec `.\hoopcut.bat --help`.
 
 ## Retoucher les choix de l'IA
 
-L'analyse est enregistrée dans `travail/<identifiant de la vidéo>/analyse_ia.json`. Tu peux y corriger un nom de joueur, une note de spectacle, ou marquer une action comme ralenti (`"replay": true`).
+L'analyse est enregistrée dans `hoopcut-donnees\travail\<identifiant de la vidéo>\analyse_locale.json` (`analyse_gemini.json` avec Gemini). Tu peux y corriger un nom de joueur, une note de spectacle, ou marquer une action comme ralenti (`"replay": true`).
 
-Relance ensuite la même commande. L'analyse n'est pas refaite, c'est donc gratuit et rapide. Ça marche aussi pour essayer un autre focus, un autre ordre ou une autre musique sur la même vidéo.
+Relance ensuite la même commande : l'analyse n'est pas refaite, et le short est remonté en une à deux minutes avec tes corrections.
 
-## Coût
+Les noms de joueurs viennent des commentaires, mais seuls les noms sûrs sont affichés :
+- ceux écrits dans le titre ou la description YouTube, avec leur orthographe (« Fodzo Dada » et non « Fuzo Dada ») ;
+- ceux que l'IA reconnaît comme de vrais joueurs, orthographe corrigée (« Lemon yama » devient « Victor Wembanyama »).
 
-L'IA est facturée par Google selon la quantité de vidéo regardée :
+Les autres noms, souvent mal entendus, sont retirés, et la légende montre alors l'équipe (« DUNK · VIL »). C'est fréquent pour les championnats moins connus de l'IA. Pour afficher un nom, écris-le dans le champ `"player"` de l'action, dans ce fichier.
 
-- environ **0,10 à 0,40 $ pour un résumé de 5 à 10 minutes** avec le modèle par défaut (`gemini-3.8-flash`, tarifs de septembre 2026) ;
-- le coût réel s'affiche après chaque analyse ;
-- `--resolution low` le réduit, mais le score au tableau est alors moins bien lu.
+## Option Gemini (IA en ligne de Google)
 
-Google propose aussi un niveau gratuit, avec des limites d'usage. Sur ce niveau, Google peut utiliser les vidéos envoyées pour améliorer ses produits.
+Gemini est plus précis que l'IA locale et bien plus rapide (1 à 3 min). Il entend aussi directement le son. Mais la vidéo est envoyée chez Google, et il faut une clé :
+
+1. crée-la sur https://aistudio.google.com/apikey ;
+2. copie le fichier `.env.example` en `.env`, dans le dossier du projet ;
+3. remplace `colle_ta_cle_ici` par ta clé ;
+4. ajoute `--ia gemini` à la commande.
+
+Coût : environ **0,10 à 0,40 $ pour un résumé de 5 à 10 minutes** (`gemini-3.8-flash`, tarifs de septembre 2026). Le coût réel s'affiche après chaque analyse. Google propose aussi un niveau gratuit, avec des limites d'usage ; sur ce niveau, Google peut utiliser les vidéos envoyées pour améliorer ses produits.
 
 ## Problèmes fréquents
 
+- **« L'IA locale n'est pas installée »** : double-clique sur `installer.bat`.
+- **« Le moteur local s'est arrêté au démarrage »** : la mémoire de la carte graphique est sans doute pleine. Ferme les jeux et logiciels de montage, puis relance. Le détail est dans `ia_locale.log`, à côté de l'analyse.
 - **« FFmpeg est introuvable »** : installe FFmpeg, puis rouvre le terminal.
 - **« YouTube demande une connexion »** : relance avec `--cookies-navigateur chrome` (ou `firefox`, `edge`…), en étant connecté à YouTube dans ce navigateur.
 - **« pas disponible dans ton pays »** : la vidéo est bloquée dans ta région (fréquent avec les chaînes TV).
-- **Autre échec de téléchargement** : YouTube change souvent. Mets à jour l'outil de téléchargement avec `python -m pip install -U yt-dlp`.
+- **Autre échec de téléchargement** : YouTube change souvent. Relance `installer.bat`, qui met aussi à jour l'outil de téléchargement.
 - **« Clé Gemini refusée »** : vérifie le fichier `.env`.
 
 ## Droits d'auteur
@@ -136,19 +150,24 @@ Le plus sûr est d'utiliser des vidéos dont tu as les droits (ton club, ta cha�
 
 ```
 hoopcut/
-  fetch.py      téléchargement (yt-dlp) ou fichier local
-  analyze.py    analyse par Gemini (API Interactions : vidéo + son, JSON imposé)
-  prompts.py    consigne donnée à l'IA : à modifier pour changer ses critères
-  models.py     format des actions (réponse de l'IA et format interne)
-  shots.py      changements de plan (filtre scene de FFmpeg)
-  select.py     choix des clips (programmation dynamique sur la durée)
-  overlay.py    habillage PNG (titre, score, légende) avec Pillow
-  render.py     montage FFmpeg (vertical, fond flou, fondus, musique, volume -14 LUFS)
-  heuristic.py  mode --sans-ia (volume sonore)
-  pipeline.py   enchaînement des étapes
-  cli.py        ligne de commande
+  fetch.py          téléchargement (yt-dlp) ou fichier local
+  analyze_local.py  analyse locale : Qwen3.5-4B via llama-server (entrée vidéo native, JSON imposé)
+  transcribe.py     commentaires : whisper.cpp en arrière-plan, lu au fil de l'eau
+  engines.py        emplacement, téléchargement et vérification des moteurs et modèles
+  analyze.py        analyse par Gemini (API Interactions : vidéo + son, JSON imposé)
+  prompts.py        consignes données aux IA : à modifier pour changer leurs critères
+  models.py         format des actions (réponse de l'IA et format interne)
+  shots.py          changements de plan (filtre scene de FFmpeg)
+  select.py         choix des clips (programmation dynamique sur la durée)
+  overlay.py        habillage PNG (titre, score, légende) avec Pillow
+  render.py         montage FFmpeg (vertical, fond flou, fondus, musique, volume -14 LUFS)
+  heuristic.py      mode --sans-ia (volume sonore)
+  pipeline.py       enchaînement des étapes
+  cli.py            ligne de commande
 ```
 
-Tests (FFmpeg requis) : `python -m pip install -e ".[dev]"` puis `python -m pytest`. Les tests fabriquent une vidéo synthétique et simulent les réponses de Gemini : ils ne coûtent rien et n'utilisent pas le réseau.
+Moteurs installés par `installer.bat` : llama.cpp b11222 (CUDA 12.4) et whisper.cpp b5130 (processeur), avec Qwen3.5-4B Q4_K_M, son module de vision F16 et Whisper large-v3-turbo. La variable d'environnement Windows `HOOPCUT_DONNEES` change le dossier des gros fichiers.
+
+Tests (FFmpeg requis) : `python -m pip install -e ".[dev]"` puis `python -m pytest`. Les tests fabriquent une vidéo synthétique et simulent les réponses des IA : ils ne demandent ni carte graphique ni réseau.
 
 Police : [Anton](https://fonts.google.com/specimen/Anton) (SIL Open Font License, voir `hoopcut/assets/fonts/OFL.txt`).

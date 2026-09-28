@@ -30,6 +30,7 @@ class Source:
     uploader: str | None
     url: str | None
     info: MediaInfo
+    description: str | None = None  # description YouTube : noms des joueurs bien écrits, crédits musique…
 
 
 def fetch(source: str, work_root: Path, *, cookies_browser: str | None = None, log: Callable = print) -> Source:
@@ -84,12 +85,14 @@ def _download(url: str, work_root: Path, cookies_browser: str | None, log: Calla
     title = meta.get("title") or video_id
     uploader = meta.get("uploader") or meta.get("channel")
     page = meta.get("webpage_url") or url
+    description = (meta.get("description") or "").strip() or None
     (work_dir / "source.json").write_text(
-        json.dumps({"id": video_id, "title": title, "uploader": uploader, "url": page}, ensure_ascii=False, indent=2),
+        json.dumps({"id": video_id, "title": title, "uploader": uploader, "url": page, "description": description},
+                   ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return Source(path=path, work_dir=work_dir, slug=slugify(title), title=title, uploader=uploader, url=page,
-                  info=probe(path))
+                  info=probe(path), description=description)
 
 
 def _existing_source(work_dir: Path) -> Path | None:

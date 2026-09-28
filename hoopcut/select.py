@@ -35,6 +35,8 @@ class SelectionSettings:
     focus_players: list[str] = field(default_factory=list)
     snap_window: float = 1.2  # distance max pour caler une coupe sur un changement de plan
     cost_per_second: float = 0.55  # un clip n'entre que s'il « vaut » plus que le temps qu'il occupe
+    single_shot: bool = False  # clip limité au plan du geste décisif (compilation : un plan = une action)
+    min_spectacular: int = 0  # si assez d'actions atteignent cette note, les autres sont laissées de côté
 
     @property
     def focus(self) -> bool:
@@ -129,6 +131,9 @@ def _window(
 ) -> Clip | None:
     key = min(max(m.key, m.start), m.end)
     low, high = _bounds(m, cuts, duration, slack)
+    shot = _shot(key, cuts, duration) if s.single_shot else None
+    if shot:
+        low, high = max(low, shot[0]), min(high, shot[1])
     start = max(low, key - pre)
     end = min(high, key + post)
     start = _snap_start(start, key, cuts, s.snap_window)
@@ -142,9 +147,20 @@ def _window(
         start = end - s.max_clip
     if end - start < s.min_clip:
         start, end = _widen(start, end, *_bounds(m, cuts, duration, max(slack, 1.5)), s.min_clip)
+        if shot:  # même élargi, le clip ne sort pas du plan de l'action
+            start, end = max(start, shot[0]), min(end, shot[1])
     if end - start < 0.8 * s.min_clip:
         return None
     return Clip(start=round(start, 2), end=round(end, 2), moment=m)
+
+
+def _shot(key: float, cuts: list[float], duration: float, shortest: float = 2.4) -> tuple[float, float] | None:
+    """Le plan qui contient le geste décisif, s'il dure assez longtemps pour faire un clip à lui seul."""
+    begin = max((c for c in cuts if c <= key - 0.2), default=0.0)
+    finish = min((c for c in cuts if c >= key + 0.2), default=duration)
+    if finish - begin < shortest:
+        return None
+    return begin + FRAME, finish - FRAME
 
 
 def _bounds(m: Moment, cuts: list[float], duration: float, slack: float) -> tuple[float, float]:
@@ -235,12 +251,22 @@ def _dedupe(clips: list[Clip], s: SelectionSettings) -> list[Clip]:
 
 
 def _choose(candidates: list[Clip], s: SelectionSettings) -> tuple[list[Clip] | None, bool]:
-    """Renvoie (clips choisis ou None, vrai si des actions hors focus ont servi de complément)."""
-    chosen = _knapsack([c for c in candidates if c.focus], s)
-    if chosen is None and s.focus:
-        chosen = _knapsack(candidates, s)
-        return chosen, chosen is not None
-    return chosen, False
+    """Renvoie (clips choisis ou None, vrai si des actions hors focus ont servi de complément).
+    Avec `min_spectacular`, on essaie d'abord de remplir le short avec les seules actions assez spectaculaires."""
+    pools = [candidates]
+    strong = [c for c in candidates if c.moment.spectacular >= s.min_spectacular]
+    if s.min_spectacular and strong and len(strong) < len(candidates):
+        pools.insert(0, strong)
+    for pool in pools:
+        chosen = _knapsack([c for c in pool if c.focus], s)
+        if chosen is not None:
+            return chosen, False
+    if s.focus:
+        for pool in pools:
+            chosen = _knapsack(pool, s)
+            if chosen is not None:
+                return chosen, True
+    return None, False
 
 
 def _knapsack(items: list[Clip], s: SelectionSettings) -> list[Clip] | None:

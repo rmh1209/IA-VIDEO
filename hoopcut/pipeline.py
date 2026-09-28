@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
 from .analyze import AnalysisError, GeminiSettings, analyze_with_gemini, make_analysis_proxy
+from .analyze_local import LOCAL_POST_ROLL, LocalSettings, analyze_local
 from .fetch import Source, fetch
 from .ffmpeg_utils import probe, require_ffmpeg
 from .heuristic import analyze_heuristic
@@ -26,11 +27,13 @@ class JobSettings:
     work_root: Path = Path("travail")
     out_root: Path = Path("sorties")
     use_ai: bool = True
+    ai: str = "locale"  # locale (sur ce PC) | gemini (en ligne, clé nécessaire)
     reanalyze: bool = False
     analyze_only: bool = False
     cookies_browser: str | None = None
     title: str | None = None
     show_score: bool = True
+    local: LocalSettings = field(default_factory=LocalSettings)
     gemini: GeminiSettings = field(default_factory=GeminiSettings)
     selection: SelectionSettings = field(default_factory=SelectionSettings)
     render: RenderSettings = field(default_factory=RenderSettings)
@@ -56,7 +59,15 @@ def run_job(source_arg: str, job: JobSettings, log: Log = print) -> Path | None:
             "ajoute --volume-original 0.3 ou --sans-musique.")
 
     log("[4/5] Choix des meilleurs moments")
-    plan = select_clips(analysis, cuts, job.selection)
+    selection = job.selection
+    if analysis.analyzer == "locale" and selection.post_roll < LOCAL_POST_ROLL:
+        # L'IA locale situe le geste décisif à 1 ou 2 s près : on garde un peu plus de jeu après
+        selection = replace(selection, post_roll=LOCAL_POST_ROLL)
+    if analysis.video_type == "compilation":
+        # Dans une compilation, chaque plan vient d'un autre match : un clip ne doit pas en déborder.
+        # Les clips sont alors courts : on n'y met que des actions très spectaculaires s'il y en a assez.
+        selection = replace(selection, single_shot=True, min_spectacular=max(selection.min_spectacular, 7))
+    plan = select_clips(analysis, cuts, selection)
     if not plan.clips:
         raise AnalysisError("Aucune action exploitable dans cette vidéo.")
     for warning in plan.warnings:
@@ -75,22 +86,41 @@ def run_job(source_arg: str, job: JobSettings, log: Log = print) -> Path | None:
     return out
 
 
+def analysis_cache(work_dir: Path, job: JobSettings) -> Path:
+    return work_dir / (f"analyse_{job.ai}.json" if job.use_ai else "analyse_sans_ia.json")
+
+
 def _analysis(source: Source, proxy: Path, cuts: list[float], job: JobSettings, log: Log) -> Analysis:
-    cache = source.work_dir / ("analyse_ia.json" if job.use_ai else "analyse_sans_ia.json")
+    cache = analysis_cache(source.work_dir, job)
     if cache.exists() and not job.reanalyze:
         log(f"[3/5] Analyse déjà faite, réutilisée ({cache}) — option --reanalyser pour la refaire")
         try:
             return Analysis.model_validate_json(cache.read_text(encoding="utf-8"))
         except ValueError as exc:
             raise AnalysisError(f"Le fichier {cache} est invalide (corrige-le ou supprime-le) : {exc}") from exc
-    if job.use_ai:
+    if job.use_ai and job.ai == "gemini":
         log("[3/5] Analyse par l'IA vidéo (Gemini) : elle regarde toute la vidéo, avec le son")
         analysis = analyze_with_gemini(proxy, source.info.duration, job.gemini, work_dir=source.work_dir, log=log)
+    elif job.use_ai:
+        log("[3/5] Analyse par l'IA vidéo locale : elle regarde toute la vidéo et écoute les commentaires")
+        if job.reanalyze:
+            _forget_local_analysis(source.work_dir)
+        analysis = analyze_local(proxy, source.info, cuts, source.title, source.uploader, source.work_dir,
+                                 job.local, log, description=source.description)
     else:
         log("[3/5] Analyse sans IA (volume sonore) — mode test, peu fiable")
         analysis = analyze_heuristic(proxy, source.info, cuts, source.title)
     cache.write_text(analysis.model_dump_json(indent=2), encoding="utf-8")
     return analysis
+
+
+def _forget_local_analysis(work_dir: Path) -> None:
+    """--reanalyser : on oublie les fenêtres déjà regardées (la transcription, elle, reste valable)."""
+    folder = work_dir / "ia_locale"
+    if folder.is_dir():
+        for path in folder.iterdir():
+            if path.is_file():
+                path.unlink()
 
 
 def build_overlays(plan: EditPlan, analysis: Analysis, title: str, job: JobSettings) -> list[OverlayContent]:
@@ -125,7 +155,7 @@ def _tag(analysis: Analysis, job: JobSettings) -> str | None:
 
 
 def _caption(m, analysis: Analysis) -> str | None:
-    if analysis.analyzer != "gemini":
+    if analysis.analyzer == "heuristique":
         return None
     if m.player:
         return f"{m.label} · {m.player}"
@@ -154,7 +184,7 @@ def _log_moments(analysis: Analysis, log: Log) -> None:
     moments = analysis.moments
     replays = sum(m.replay for m in moments)
     log(f"      {len(moments)} actions repérées ({replays} ralentis écartés)")
-    if analysis.analyzer != "gemini":
+    if analysis.analyzer == "heuristique":
         return
     if analysis.team_a and analysis.team_b:
         final = (f" — score final {analysis.final_score_a}-{analysis.final_score_b}"

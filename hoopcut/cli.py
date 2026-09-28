@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from .analyze import DEFAULT_MODEL, AnalysisError, GeminiSettings
+from .analyze_local import LocalSettings
+from .engines import data_dir
 from .fetch import DownloadError
 from .ffmpeg_utils import FFmpegError
 from .pipeline import JobSettings, run_job
@@ -21,7 +23,8 @@ exemples :
   hoopcut "https://youtu.be/oJd_NbZx9VA" --focus-joueur "Parker"
   hoopcut "https://youtu.be/oJd_NbZx9VA" --focus-equipe "ASVEL" --titre "L'ASVEL EN FEU"
   hoopcut "https://youtu.be/ORfjgE6n2Pc" --musique musique/beat.mp3 --ordre crescendo
-  hoopcut ma_video.mp4 --sans-ia            (essai gratuit, sans clé Gemini)
+  hoopcut "https://youtu.be/oJd_NbZx9VA" --ia gemini   (IA en ligne de Google, clé nécessaire)
+  hoopcut ma_video.mp4 --sans-ia            (essai rapide du montage, sans IA)
 """
 
 
@@ -63,23 +66,30 @@ def build_parser() -> argparse.ArgumentParser:
     style.add_argument("--sans-score", action="store_true", help="ne pas afficher le score")
 
     ai = parser.add_argument_group("IA")
-    ai.add_argument("--modele", default=DEFAULT_MODEL, help=f"modèle Gemini (défaut {DEFAULT_MODEL})")
+    ai.add_argument("--ia", choices=["locale", "gemini"], default="locale",
+                    help="locale = sur ce PC, gratuite, sans clé (défaut) ; gemini = en ligne chez Google, "
+                    "plus précise et plus rapide, clé nécessaire")
     ai.add_argument("--ips", type=float, metavar="N",
-                    help="images par seconde regardées par l'IA (défaut : 2 pour une vidéo de moins de 12 min)")
+                    help="images par seconde regardées par l'IA. IA locale : 1 par défaut, 2 = plus précis mais "
+                    "deux fois plus long. Gemini : 2 si la vidéo dure moins de 12 min")
+    ai.add_argument("--sans-commentaires", action="store_true",
+                    help="IA locale : ne pas transcrire les commentaires (plus rapide, mais noms de joueurs perdus)")
+    ai.add_argument("--modele", default=DEFAULT_MODEL, help=f"Gemini : modèle (défaut {DEFAULT_MODEL})")
     ai.add_argument("--resolution", choices=["low", "medium", "high"], default="medium",
-                    help="finesse de l'image analysée (low = moins cher, high = lit mieux le score)")
+                    help="Gemini : finesse de l'image analysée (low = moins cher, high = lit mieux le score)")
     ai.add_argument("--mode-video", choices=["statique", "agentique"], default="statique",
-                    help="statique = l'IA regarde tout ; agentique = elle navigue et zoome d'elle-même")
+                    help="Gemini : statique = l'IA regarde tout ; agentique = elle navigue et zoome d'elle-même")
     ai.add_argument("--reanalyser", action="store_true", help="refaire l'analyse même si elle existe déjà")
     ai.add_argument("--sans-ia", action="store_true",
-                    help="mode test gratuit : moments repérés au volume sonore, sans comprendre le jeu")
+                    help="essai rapide : moments repérés au volume sonore, sans comprendre le jeu")
     ai.add_argument("--analyse-seulement", action="store_true", help="analyser sans monter la vidéo")
 
     misc = parser.add_argument_group("divers")
     misc.add_argument("--cookies-navigateur", metavar="NAVIGATEUR",
                       choices=["chrome", "firefox", "edge", "safari", "brave", "opera", "chromium", "vivaldi"],
                       help="utiliser la connexion YouTube de ce navigateur si YouTube bloque le téléchargement")
-    misc.add_argument("--dossier-travail", type=Path, default=Path("travail"))
+    misc.add_argument("--dossier-travail", type=Path, default=data_dir() / "travail",
+                      help="vidéos téléchargées et analyses (défaut : %(default)s, hors OneDrive)")
     misc.add_argument("--dossier-sortie", type=Path, default=Path("sorties"))
     return parser
 
@@ -94,11 +104,13 @@ def job_from_args(args: argparse.Namespace) -> JobSettings:
         work_root=args.dossier_travail,
         out_root=args.dossier_sortie,
         use_ai=not args.sans_ia,
+        ai=args.ia,
         reanalyze=args.reanalyser,
         analyze_only=args.analyse_seulement,
         cookies_browser=args.cookies_navigateur,
         title=args.titre,
         show_score=not args.sans_score,
+        local=LocalSettings(fps=args.ips or LocalSettings.fps, commentary=not args.sans_commentaires),
         gemini=GeminiSettings(
             model=args.modele,
             fps=args.ips,

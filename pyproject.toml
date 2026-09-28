@@ -12,7 +12,8 @@ dependencies = [
     "google-genai>=2.25",
     "pydantic>=2.6",
     "Pillow>=10.0",
-    "yt-dlp>=2026.8.19",
+    # default = résolution des défis JavaScript de YouTube (yt-dlp-ejs), deno = le moteur JavaScript
+    "yt-dlp[default,deno]>=2026.8.19",
 ]
 
 [project.optional-dependencies]

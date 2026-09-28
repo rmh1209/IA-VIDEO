@@ -11,7 +11,7 @@ from hoopcut.fetch import fetch
 from hoopcut.ffmpeg_utils import probe
 from hoopcut.models import Analysis
 from hoopcut.overlay import SAFE_BOTTOM, OverlayContent, draw_overlay
-from hoopcut.pipeline import JobSettings, run_job
+from hoopcut.pipeline import JobSettings, analysis_cache, run_job
 from hoopcut.render import RenderSettings
 from hoopcut.select import SelectionSettings
 
@@ -40,10 +40,10 @@ def _job(tmp_path, selection=None, render=None, **options):
 
 
 def _seed_ai_analysis(job, video):
-    """Met en cache une analyse au format Gemini : le pipeline la réutilise sans appeler l'API."""
+    """Met en cache une analyse IA : le pipeline la réutilise sans lancer de modèle."""
     source = fetch(str(video), job.work_root)
     analysis = Analysis.from_ai(fake_ai_analysis(SCENES), duration=source.info.duration, model="faux")
-    (source.work_dir / "analyse_ia.json").write_text(analysis.model_dump_json(), encoding="utf-8")
+    analysis_cache(source.work_dir, job).write_text(analysis.model_dump_json(), encoding="utf-8")
 
 
 @needs_ffmpeg
@@ -125,3 +125,8 @@ def test_command_line_options(tmp_path):
     assert job.selection.order == "accroche"
     assert job.render.music is None
     assert job.gemini.processing == "agentic"
+    assert job.ai == "locale" and job.local.commentary and job.local.fps == 1.0
+
+    gemini = job_from_args(build_parser().parse_args(["video.mp4", "--ia", "gemini", "--sans-commentaires"]))
+    assert gemini.ai == "gemini" and not gemini.local.commentary
+    assert analysis_cache(tmp_path, gemini).name == "analyse_gemini.json"

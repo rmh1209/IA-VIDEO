@@ -52,6 +52,28 @@ def test_compilation_builds_up_to_the_best_action():
     assert values == sorted(values)
 
 
+def test_single_shot_clips_stay_inside_the_shot_of_the_action():
+    # Actions à 6, 16, 26… s ; un changement de plan 1,5 s avant et 1,8 s après chaque geste décisif
+    analysis = _analysis(video_type="compilation")
+    cuts = sorted([m.key - 1.5 for m in analysis.moments] + [m.key + 1.8 for m in analysis.moments])
+    free = select_clips(analysis, cuts, SelectionSettings(min_total=20, max_total=40, target=30))
+    tight = select_clips(analysis, cuts, SelectionSettings(min_total=20, max_total=40, target=30, single_shot=True))
+    for clip in tight.clips:
+        key = clip.moment.key
+        assert key - 1.5 <= clip.start and clip.end <= key + 1.8  # rien d'un autre plan
+    assert any(c.start < c.moment.key - 1.5 for c in free.clips)  # sans la règle, on déborde
+
+
+def test_minimum_rating_is_used_only_when_enough_strong_actions_exist():
+    analysis = _analysis(count=40)  # notes de 1 à 10, environ 4 actions par note
+    strict = select_clips(analysis, [], SelectionSettings(min_spectacular=7))
+    assert 60.0 <= strict.total <= 80.0
+    assert all(c.moment.spectacular >= 7 for c in strict.clips)
+    few = _analysis(count=12)  # trop peu d'actions notées 7 ou plus : on complète avec les autres
+    relaxed = select_clips(few, [], SelectionSettings(min_spectacular=7))
+    assert any(c.moment.spectacular < 7 for c in relaxed.clips)
+
+
 def test_hook_order_puts_the_best_action_first():
     plan = select_clips(_analysis(), cuts=[], settings=SelectionSettings(order="accroche"))
     assert plan.clips[0].value == max(c.value for c in plan.clips)

@@ -1,4 +1,4 @@
-"""Consigne donnée à l'IA vidéo. Modifiable pour ajuster ses choix."""
+"""Consignes données aux IA vidéo (Gemini et IA locale). Modifiables pour ajuster leurs choix."""
 
 from __future__ import annotations
 
@@ -52,3 +52,84 @@ def build_prompt(duration: float) -> str:
     minutes, seconds = divmod(round(duration), 60)
     human = f"{minutes} min {seconds:02d} s" if minutes else f"{seconds} s"
     return ANALYSIS_PROMPT.format(duration=human, end=format_timecode(duration))
+
+
+# --- IA locale (Qwen3.5-4B) : consignes courtes et précises, un petit modèle s'y perd moins ---
+
+LOCAL_OVERVIEW_PROMPT = """\
+Voici {count} images prises à intervalles réguliers dans une vidéo YouTube de basket.
+Titre de la vidéo : « {title} »{channel}.
+{commentary}
+Réponds :
+- video_type : match (résumé d'un seul match), compilation (actions de plusieurs matchs) ou other ;
+- team_a, team_b : noms courts des deux équipes tels qu'écrits sur le tableau de score (team_a = celle écrite \
+en premier) ; null pour une compilation ;
+- jersey_a, jersey_b : couleur principale du maillot de chaque équipe, en français (ex. « jaune », « noir ») ;
+- competition : compétition (ex. EuroLeague, NBA, Betclic Élite) si elle est visible ou dans le titre, sinon null ;
+- scoreboard : position du tableau de score à l'écran (top_left, top_center, top_right, bottom_left, \
+bottom_center, bottom_right) ou none.
+"""
+
+LOCAL_WINDOW_PROMPT = """\
+Tu es monteur vidéo spécialiste du basket. Tu viens de regarder un extrait de {duration:g} secondes d'une vidéo \
+de basket ({context}). Les images défilent dans l'ordre, {fps:g} par seconde ; les repères comme [0m12.00s] \
+donnent le temps écoulé depuis le début de l'extrait.
+{commentary}
+Liste les actions de jeu marquantes que tu VOIS dans les images : panier marqué, contre, interception. \
+Les commentaires servent seulement à savoir qui joue et si le tir est réussi : n'ajoute jamais une action \
+que tu ne vois pas, et ne compte pas une passe comme un panier. En général, 0 à 4 actions par extrait.
+Pour chaque action :
+- key : temps (en secondes depuis le début de l'extrait) du geste décisif : ballon qui entre dans le panier, \
+contre ou interception ;
+- start : début de l'attaque, 2 à 4 s avant key ; end : 1 à 2 s après key ;
+- action : dunk (smash au-dessus du cercle), alley_oop, layup (double-pas près du panier), mid_range (tir \
+à mi-distance), three_pointer (tir de loin, derrière l'arc), block (contre), steal (interception), fast_break \
+(contre-attaque), free_throw (lancer franc) ou other ;
+- team : {teams} ;
+- player : nom du joueur qui réalise l'action (celui qui marque, pas le passeur ; celui qui contre, pas le \
+tireur ; celui qui intercepte), s'il est prononcé par les commentateurs ou écrit à l'écran, sinon null ;
+- scored : true seulement si le ballon entre dans le panier ;
+- replay : true si ce passage est une rediffusion au ralenti ;
+- spectacular : de 1 (banal) à 10 (exceptionnel : dunk rageur, contre spectaculaire, tir au buzzer) ;
+- description : une phrase courte en français.
+Si l'extrait ne montre aucune action de jeu (plateau télé, interview, public), renvoie une liste vide.
+"""
+
+LOCAL_SCORE_PROMPT = """\
+Chaque image est un gros plan sur le tableau de score d'un match {team_a} - {team_b}.
+Pour chaque image, dans l'ordre, lis le score : score_a = points de {team_a}, score_b = points de {team_b}. \
+Le score d'une équipe est le nombre sur la même ligne que son nom, en général le plus à droite. \
+Le chronomètre (ex. 7:46) et le décompte des 24 secondes (un petit nombre souvent dans une case de couleur) \
+ne sont pas des scores.
+Mets null si le tableau n'est pas visible ou illisible.
+"""
+
+LOCAL_VIEW_PROMPT = """\
+Chaque image est tirée d'une vidéo de basket. Pour chaque image, dans l'ordre, dis comment elle est filmée :
+- large : caméra principale, vue large et haute du terrain, les joueurs paraissent petits ;
+- gros_plan : quelques joueurs en grand, ou caméra au bord du terrain ;
+- ralenti : rediffusion d'une action (image floue, angle inhabituel) ;
+- autre : public, banc, plateau TV, interview ou graphique.
+"""
+
+LOCAL_NAMES_PROMPT = """\
+Vidéo de basket : « {title} »{context}.
+Une transcription automatique des commentaires a produit ces noms de joueurs, parfois mal orthographiés :
+{names}
+Pour chaque nom de la liste :
+- heard : le nom tel qu'il est écrit dans la liste ;
+- name : nom complet et bien orthographié du joueur réel si tu le reconnais (par exemple « Lemon yama » -> \
+« Victor Wembanyama ») ; sinon, recopie le nom tel quel ;
+- known : true seulement si tu es certain qu'il s'agit d'un vrai joueur que tu connais, sinon false.
+"""
+
+LOCAL_SUMMARY_PROMPT = """\
+Tu prépares la publication d'un short vertical de basket (60 à 80 s) tiré de la vidéo « {title} »{channel}.
+{context}
+Quelques actions du short :
+{actions}
+Écris en français (« dunk » se dit « dunk »), sans donner de nombre d'actions :
+- title : titre accrocheur et complet, 40 caractères maximum, sans emoji ni hashtag ;
+- description : 1 à 2 phrases pour la publication ;
+- hashtags : 5 à 8 hashtags pertinents.
+"""

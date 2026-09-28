@@ -30,6 +30,7 @@ ACTIONS: dict[str, str] = {
     "layup": "LAY-UP",
     "mid_range": "TIR À MI-DISTANCE",
     "free_throw": "LANCER FRANC",
+    "basket": "PANIER",  # panier dont le type exact n'est pas sûr
     "other": "ACTION",
 }
 
