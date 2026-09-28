@@ -57,6 +57,11 @@ KNOWN_ERRORS = (AnalysisError, DownloadError, FFmpegError, FileNotFoundError)
 
 WINDOW_LINE = re.compile(r"^\[(\d+)/(\d+)\] \d+:\d\d")  # « [12/31] 05:30.0 → 06:00.0 : dunk — reste ≈ 9 min »
 CLIP_LINE = re.compile(r"^Clip (\d+)/(\d+)$")
+# vérifications image par image, puis lecture du tableau de score : (motif, début, fin, texte)
+CHECK_LINES = [
+    (re.compile(r"^Images vérifiées : (\d+)/(\d+)$"), 0.85, 0.88, "Vérification des meilleures actions"),
+    (re.compile(r"^Tableau de score lu : (\d+)/(\d+) actions$"), 0.88, 0.94, "Lecture du tableau de score"),
+]
 TITLE_LINE = re.compile(r"^(.+) \(\d+ min \d+ s\)$")
 # début de ligne du journal -> (avancement, texte montré dans la page)
 STAGES = [
@@ -474,6 +479,11 @@ def _stage(text: str, step: str) -> tuple[float, str] | None:
         if eta:
             detail += f" (encore ≈ {eta[1]} min)"
         return 0.12 + 0.70 * done / total, detail
+    for pattern, low, high, label in CHECK_LINES:
+        check = pattern.match(text)
+        if check:
+            done, total = int(check[1]), int(check[2])
+            return low + (high - low) * done / total, f"{label} ({done} sur {total})…"
     for prefix, progress, detail in STAGES:
         if text.startswith(prefix):
             return progress, detail

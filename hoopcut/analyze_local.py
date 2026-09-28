@@ -597,13 +597,16 @@ def score_times(key: float, cuts: list[float], duration: float) -> tuple[float, 
 
 
 def _views(server: LlamaServer, video: Path, frames: dict[str, float], media: Path,
-           prompt: str = LOCAL_VIEW_PROMPT, width: int = 448) -> dict[str, str]:
-    """Prise de vue (large, gros_plan, ralenti, autre) des images demandées {nom: instant}, gardée en cache."""
+           prompt: str = LOCAL_VIEW_PROMPT, width: int = 448, log: Log | None = None) -> dict[str, str]:
+    """Prise de vue (large, gros_plan, ralenti, autre) des images demandées {nom: instant}, gardée en cache.
+    Avec `log`, l'avancement est donné toutes les 6 images (l'aperçu l'affiche)."""
     tag = hashlib.sha1((prompt if width == 448 else f"{prompt}|{width}").encode()).hexdigest()[:8]
     cache = media / f"vues_{tag}.json"
     known = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
     todo = [(name, t) for name, t in frames.items() if name not in known]
     for start in range(0, len(todo), 6):
+        if log and start:
+            log(f"      Images vérifiées : {start}/{len(todo)}")
         batch = todo[start:start + 6]
         images = [_image_part(_frame(video, t, media / f"vue_{i}.jpg", width=width)) for i, (_, t) in enumerate(batch)]
         schema = {"type": "object", "properties": {"views": {
@@ -633,7 +636,7 @@ def _trim_to_live_play(server: LlamaServer, video: Path, info: MediaInfo, moment
     if not frames:
         return
     log(f"      Vérification du jeu autour des meilleures actions ({len(frames)} images)…")
-    known = _views(server, video, frames, media, prompt=LOCAL_SHOT_PROMPT, width=320)
+    known = _views(server, video, frames, media, prompt=LOCAL_SHOT_PROMPT, width=320, log=log)
     for m in moments:
         times = samples(m)
         wide = [known.get(f"t_{t:.1f}", "large") == "large" for t in times]
@@ -728,6 +731,8 @@ def _read_scores(server: LlamaServer, video: Path, info: MediaInfo, moments: lis
     prompt = LOCAL_SCORE_PROMPT.format(team_a=overview.team_a, team_b=overview.team_b)
     nullable_int = {"type": ["integer", "null"], "minimum": 0, "maximum": 250}
     for batch_start in range(0, len(targets), 4):
+        if batch_start:
+            log(f"      Tableau de score lu : {batch_start}/{len(targets)} actions")
         batch = targets[batch_start:batch_start + 4]
         images = []
         for i, m in enumerate(batch):

@@ -127,7 +127,7 @@ def test_clips_stay_on_the_wide_live_play_around_the_action(monkeypatch):
         295.5: "autre", 297.0: "autre", 298.5: "gros_plan", 300.0: "gros_plan", 301.5: "autre", 303.0: "autre",
     }
 
-    def fake_views(server, video, frames, media, prompt=None, width=448):
+    def fake_views(server, video, frames, media, prompt=None, width=448, log=None):
         return {name: views[float(name[2:])] for name in frames}
 
     monkeypatch.setattr(analyze_local, "_views", fake_views)

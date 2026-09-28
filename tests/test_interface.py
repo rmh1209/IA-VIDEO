@@ -214,4 +214,7 @@ def test_progress_is_read_from_the_log():
     assert "passage 3 sur 5" in _stage("[3/5] 01:00.0 → 01:30.0 : rien de notable", "analyse")[1]
     assert _stage("[3/5] Analyse déjà faite, réutilisée", "analyse")[0] == 0.95
     assert _stage("Clip 2/8", "montage")[1] == "Montage du clip 2 sur 8…"
+    progress, detail = _stage("Tableau de score lu : 12/24 actions", "analyse")
+    assert progress == pytest.approx(0.91) and detail == "Lecture du tableau de score (12 sur 24)…"
+    assert _stage("Images vérifiées : 36/144", "analyse")[1] == "Vérification des meilleures actions (36 sur 144)…"
     assert _stage("n'importe quoi", "analyse") is None
