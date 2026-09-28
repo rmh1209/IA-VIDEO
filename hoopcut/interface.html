@@ -460,7 +460,7 @@ function jouer(i) {
     habillage.classList.add('attente');  // jamais la légende du clip précédent
     habillage.src = clips[index].habillage;
   }
-  const aller = () => { lecteur.currentTime = clips[index].debut; lancer(); };
+  const aller = () => { lecteur.currentTime = clips[index].debut; calerMusique(); lancer(); };
   if (lecteur.readyState >= 1) aller();
   else lecteur.addEventListener('loadedmetadata', aller, { once: true });
 }
@@ -510,6 +510,13 @@ function majInfos() {
     point.classList.toggle('actif', i === index);
     point.classList.toggle('vu', i < index);
   });
+}
+
+// La musique reprend à l'endroit où tombera ce clip dans le short : les coupes restent sur ses temps
+function calerMusique() {
+  if (!musique.dataset.src || !apercu) return;
+  const instant = (apercu.musique_debut || 0) + clips[index].au_montage;
+  musique.currentTime = musique.duration ? instant % musique.duration : instant;
 }
 
 function synchroMusique() {

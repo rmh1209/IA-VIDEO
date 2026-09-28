@@ -44,6 +44,16 @@ def test_parse_ffmpeg_metadata():
     assert times == [0.0, 0.0666667] and scenes == [0.0, 0.45] and lumas == [101.5, 180.0]
 
 
+def test_mangled_metadata_lines_are_skipped():
+    # Vu sur une vraie vidéo : deux sorties mélangées au milieu d'un nombre
+    text = (
+        "frame:0    pts:0       pts_time:0\nlavfi.signalstats.YAVG=101.5\nlavfi.scene_score=0.04.533333\n"
+        "frame:1    pts:1024    pts_time:0.0666667\nlavfi.scene_score=0.450000\nlavfi.signalstats.YAVG=180\n"
+    )
+    times, scenes, lumas = parse_frame_stats(text)
+    assert times == [0.0, 0.0666667] and scenes == [0.0, 0.45] and lumas == [101.5, 180.0]
+
+
 @needs_ffmpeg
 def test_detects_a_gradual_white_flash_in_a_real_video(tmp_path):
     video = tmp_path / "flash.mp4"

@@ -55,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
     style.add_argument("--musique", type=Path, metavar="FICHIER_OU_DOSSIER",
                        help=f"musique à mixer (défaut : un morceau au hasard du dossier « {DEFAULT_MUSIC_DIR} »)")
     style.add_argument("--sans-musique", action="store_true", help="ne pas ajouter de musique")
+    style.add_argument("--sans-rythme", action="store_true",
+                       help="ne pas caler les changements de clip sur les temps de la musique")
     style.add_argument("--volume-musique", type=float, default=0.35, metavar="V", help="0 à 1 (défaut 0.35)")
     style.add_argument("--volume-original", type=float, default=1.0, metavar="V",
                        help="son du match, 0 à 1 (défaut 1 ; 0 = musique seule)")
@@ -144,6 +146,7 @@ def job_from_args(args: argparse.Namespace) -> JobSettings:
         avis_dir=None if args.sans_apprentissage else data_dir() / "avis",
         hook=not args.sans_accroche,
         shouts=not args.sans_cris,
+        beat_sync=not args.sans_rythme,
     )
 
 

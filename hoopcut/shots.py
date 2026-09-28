@@ -14,18 +14,19 @@ from pathlib import Path
 
 from .ffmpeg_utils import run
 
-_PTS_TIME = re.compile(r"pts_time:\s*([0-9]+(?:\.[0-9]+)?)")
-_SCENE = re.compile(r"lavfi\.scene_score=([0-9.]+)")
-_LUMA = re.compile(r"lavfi\.signalstats\.YAVG=([0-9.]+)")
+_PTS_TIME = re.compile(r"pts_time:\s*([0-9]+(?:\.[0-9]+)?)\s*$")
+_SCENE = re.compile(r"lavfi\.scene_score=([0-9]+(?:\.[0-9]+)?)\s*$")
+_LUMA = re.compile(r"lavfi\.signalstats\.YAVG=([0-9]+(?:\.[0-9]+)?)\s*$")
 
 
 def detect_cuts(video: Path, threshold: float = 0.3, min_gap: float = 0.4) -> list[float]:
     """Instants (en s) où le plan change : coupe franche, flash blanc ou fondu au noir."""
+    # Un seul filtre metadata écrit tout : deux filtres écrivant chacun de leur côté mélangeaient
+    # parfois leurs lignes (« scene_score=0.04.533333 »).
     proc = run(
         [
             "ffmpeg", "-hide_banner", "-nostdin", "-i", str(video), "-an", "-sn",
-            "-vf", "scale=192:-2,signalstats,select='gte(scene,0)',"
-            "metadata=print:key=lavfi.scene_score:file=-,metadata=print:key=lavfi.signalstats.YAVG:file=-",
+            "-vf", "scale=192:-2,signalstats,select='gte(scene,0)',metadata=print:file=-",
             "-f", "null", "-",
         ]
     )

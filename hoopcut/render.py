@@ -116,7 +116,7 @@ def render_plan(
     transitions = [rs.transition] * (len(segments) - 1)
     if transitions and plan.clips[0].teaser:
         transitions[0] = "fadewhite"  # flash : fin de l'accroche, le récit commence
-    _assemble(segments, durations, out, rs, plan.transition, transitions)
+    _assemble(segments, durations, out, rs, plan.transition, transitions, plan.music_start)
     return out
 
 
@@ -196,7 +196,7 @@ def _render_segment(
 
 
 def _assemble(segments: list[Path], durations: list[float], out: Path, rs: RenderSettings, fade: float,
-              transitions: list[str] | None = None) -> None:
+              transitions: list[str] | None = None, music_start: float = 0.0) -> None:
     count = len(segments)
     kinds = transitions or [rs.transition] * (count - 1)  # transition entre le clip i et le suivant
     use_xfade = rs.transition != "none" and count > 1 and fade > 0
@@ -230,7 +230,9 @@ def _assemble(segments: list[Path], durations: list[float], out: Path, rs: Rende
     graph.append(f"[{audio}]volume={rs.original_volume:.3f}[orig]")
     mix = "orig"
     if rs.music:
-        cmd += ["-stream_loop", "-1", "-i", str(rs.music)]
+        # la musique démarre sur un temps : les changements de clip tombent alors sur ses temps
+        cmd += ["-stream_loop", "-1", *(["-ss", f"{music_start:.3f}"] if music_start > 0 else []),
+                "-i", str(rs.music)]
         graph.append(
             f"[{count}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
             f"atrim=0:{total:.3f},asetpts=PTS-STARTPTS,volume={rs.music_volume:.3f},"

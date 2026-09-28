@@ -67,6 +67,7 @@ class EditPlan:
     clips: list[Clip]
     transition: float
     warnings: list[str] = field(default_factory=list)
+    music_start: float = 0.0  # instant de la musique où le short commence (calé sur un temps, voir beats.py)
 
     @property
     def total(self) -> float:

@@ -123,8 +123,11 @@ Ouvre un terminal dans le dossier du projet (clic droit dans le dossier, « Ouvr
 
 Dépose tes musiques **libres de droits** dans le dossier `musique/`. hoopcut en choisit une au hasard pour chaque short.
 
+Il repère les temps de la musique (grosse caisse, caisse claire) et fait tomber chaque changement de clip sur un temps : la fin des clips bouge d'au plus 0,3 s, sans jamais couper le geste ni déborder sur un autre plan. Une musique sans rythme net (ambiance, piano libre) est posée telle quelle. Dans l'aperçu, la musique repart à chaque clip de l'endroit où elle tombera dans le short.
+
 - `--musique fichier.mp3` impose une musique.
 - `--sans-musique` n'en met aucune.
+- `--sans-rythme` pose la musique sans caler les changements de clip sur ses temps.
 - `--volume-musique 0.5` monte la musique.
 - `--volume-original 0` coupe le son du match pour ne garder que la musique.
 
@@ -211,6 +214,7 @@ hoopcut/
   select.py         choix des clips (programmation dynamique sur la durée)
   hook.py           accroche : la plus belle action en ouverture
   shouts.py         cris des commentateurs reconnus dans la transcription
+  beats.py          temps de la musique (attaques graves et aigues, tempo en peigne, suivi d'Ellis) et calage des coupes
   overlay.py        habillage PNG (titre, score, légende) avec Pillow
   render.py         montage FFmpeg (vertical, fond flou, fondus, musique, volume -14 LUFS)
   heuristic.py      mode --sans-ia (volume sonore)

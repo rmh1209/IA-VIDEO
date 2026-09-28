@@ -400,12 +400,14 @@ class Studio:
         layout = compute_layout(prepared.source.info, render)
         shout_y = 100 * shout_center(layout.top, layout.video_height) / render.height
         clips = []
+        elapsed = 0.0  # début de chaque clip dans le short (pour garder la musique calée sur les coupes)
         for index, clip in enumerate(plan.clips):
             m = clip.moment
             shout = clip.shout
             clips.append({
                 "id": _clip_id(clip),
                 "accroche": clip.teaser,
+                "au_montage": round(elapsed, 3),
                 "debut": clip.start,
                 "fin": clip.end,
                 "geste": m.key,
@@ -422,6 +424,7 @@ class Studio:
                     "largeur": 100 * _shout_width(shout.text) / render.width,
                 } if shout else None,
             })
+            elapsed += clip.duration - plan.transition
         return {
             "version": self.version,
             "reprendre": self.resume,
@@ -438,6 +441,7 @@ class Studio:
             "duree": round(plan.total, 1),
             "clips": clips,
             "musique": f"/media/musique?n={self.session}-{self.runs}" if render.music else None,
+            "musique_debut": plan.music_start,
             "volume_musique": render.music_volume,
             "volume_original": render.original_volume,
             "avertissements": plan.warnings,

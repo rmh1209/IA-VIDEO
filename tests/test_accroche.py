@@ -1,10 +1,12 @@
 """Shorts plus accrocheurs : cris des commentateurs, accroche en ouverture, vidéo plus grande."""
 
 import shutil
+import subprocess
 
 import pytest
 from PIL import Image
 
+from hoopcut.beats import Beats, detect_beats, sync_to_beats
 from hoopcut.feedback import JOURNAL_FILE, Edits, learn, moment_id, record
 from hoopcut.ffmpeg_utils import MediaInfo, probe
 from hoopcut.fetch import Source
@@ -131,6 +133,62 @@ def test_compact_score_panel_leaves_room_for_a_bigger_video(tmp_path):
     assert alpha.crop((0, layout.top, 1080, layout.bottom)).getbbox() is None  # rien sur la vidéo
     assert alpha.crop((0, 1640, 1080, 1920)).getbbox() is None  # ni sur les boutons des applis
     assert alpha.crop((0, layout.bottom, 1080, 1640)).getbbox() is not None
+
+
+def _drums(path, bpm, seconds=30, offset=0.2):
+    """Musique de synthèse : grosse caisse sur les temps, charleston entre deux, basse continue."""
+    period = 60 / bpm
+    kick = f"0.8*sin(2*PI*55*t)*exp(-25*mod(t-{offset}+{period},{period}))*gte(t,{offset})"
+    hat = f"0.15*(random(0)-0.5)*exp(-60*mod(t-{offset}+{period / 2},{period}))"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi",
+                    "-i", f"aevalsrc='{kick}+{hat}+0.2*sin(2*PI*110*t)':s=44100:d={seconds}", str(path)], check=True)
+    return path
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg absent")
+@pytest.mark.parametrize("bpm", [75, 128, 160])
+def test_beats_of_a_drum_track(tmp_path, bpm):
+    beats = detect_beats(_drums(tmp_path / "beat.wav", bpm))
+    assert beats is not None and beats.bpm == pytest.approx(bpm, rel=0.02)
+    period = 60 / bpm
+    errors = [abs(((t - 0.2 + period / 2) % period) - period / 2) for t in beats.times]
+    assert max(errors) < 0.03  # sur la grosse caisse, pas sur le charleston
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg absent")
+def test_no_beat_in_a_soft_pad(tmp_path):
+    pad = tmp_path / "nappe.wav"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                    "aevalsrc='0.3*sin(2*PI*220*t)+0.2*sin(2*PI*277*t)':s=44100:d=20", str(pad)], check=True)
+    assert detect_beats(pad) is None
+
+
+def test_clip_changes_land_on_beats():
+    beats = Beats(times=[0.5 + 0.5 * k for k in range(200)], period=0.5, confidence=5.0)
+    clips = [_clip(10 * i, 10 * i + 5, 10 * i + 7.13 + 0.07 * i, 6) for i in range(8)]
+    plan = EditPlan(clips, 0.3)
+    start = sync_to_beats(plan, beats, limits=[], duration=200.0, max_total=80.0)
+    assert start == 0.5
+    elapsed = 0.0
+    for clip in plan.clips[:-1]:
+        elapsed += clip.duration - 0.3
+        cut = start + elapsed + 0.15  # milieu du fondu, dans le temps de la musique
+        assert abs((cut - 0.5) / 0.5 - round((cut - 0.5) / 0.5)) < 0.01
+    # morceau de 20 s sous un short plus long : il reprend du début, les temps aussi
+    short_track = Beats(times=[0.3 + 0.5 * k for k in range(40)], period=0.5, confidence=5.0, loop=20.0)
+    grid = short_track.in_short(start=0.3, horizon=45.0)
+    assert grid[:2] == [0.0, 0.5] and 19.7 + 0.3 in [round(t, 3) for t in grid]
+    assert all(t <= 45.0 for t in grid) and max(grid) > 40
+    looped = EditPlan([_clip(10 * i, 10 * i + 5, 10 * i + 7.13, 6) for i in range(7)], 0.3)
+    start = sync_to_beats(looped, short_track, limits=[], duration=200.0, max_total=80.0)
+    elapsed = 0.0
+    for clip in looped.clips[:-1]:
+        elapsed += clip.duration - 0.3
+        assert min(abs(elapsed + 0.15 - t) for t in short_track.in_short(start, 60.0)) < 0.01
+    # une fin de clip ne franchit pas un changement de plan, et ne coupe pas le geste
+    stuck = EditPlan([_clip(0, 5, 7.0, 6), _clip(10, 15, 17, 6)], 0.3)
+    sync_to_beats(stuck, Beats([0.0, 7.0, 7.5, 8.0], 0.5, 5.0), limits=[7.1], duration=60.0, max_total=80.0)
+    assert stuck.clips[0].end in (7.0, 6.85)
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg absent")

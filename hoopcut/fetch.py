@@ -63,7 +63,7 @@ def _download(url: str, work_root: Path, cookies_browser: str | None, log: Calla
         return cached
     import yt_dlp
 
-    options = {"quiet": True, "no_warnings": True, "noplaylist": True}
+    options = {"quiet": True, "no_warnings": True, "noplaylist": True, "noprogress": True}
     if cookies_browser:
         options["cookiesfrombrowser"] = (cookies_browser,)
     if progress:

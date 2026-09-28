@@ -9,6 +9,7 @@ from typing import Callable
 
 from .analyze import AnalysisError, GeminiSettings, analyze_with_gemini, make_analysis_proxy
 from .analyze_local import LOCAL_POST_ROLL, LocalSettings, analyze_local
+from .beats import Beats, detect_beats, sync_to_beats
 from .feedback import JOURNAL_FILE, Edits, Learned, learn, moment_id
 from .fetch import Source, fetch
 from .ffmpeg_utils import probe, require_ffmpeg
@@ -43,6 +44,7 @@ class JobSettings:
     avis_dir: Path | None = None  # journal des avis donnés dans l'aperçu (None : on n'en tient pas compte)
     hook: bool = True  # la plus belle action en ouverture (hook.py)
     shouts: bool = True  # cris des commentateurs en gros (shouts.py)
+    beat_sync: bool = True  # changements de clip sur les temps de la musique (beats.py)
 
 
 @dataclass
@@ -123,13 +125,19 @@ def choose(prepared: Prepared, job: JobSettings, log: Log = print,
 
     for clip in plan.clips:
         clip.shout = shout(clip)
+    # ni l'accroche ni un recalage sur la musique ne débordent sur un autre plan ou un ralenti
+    limits = sorted(prepared.cuts + [m.start for m in analysis.moments if m.replay])
     if hook:
-        # l'accroche ne déborde ni sur un autre plan ni sur un ralenti
-        limits = sorted(prepared.cuts + [m.start for m in analysis.moments if m.replay])
         opening = teaser(plan, limits, source.info.duration, edits.no_teaser)
         if opening:
             opening.shout = shout(opening)
             plan.clips.insert(0, opening)
+    if job.beat_sync and job.render.music:
+        beats = music_beats(job.render.music)
+        if beats:
+            plan.music_start = sync_to_beats(plan, beats, limits, source.info.duration, job.selection.max_total)
+            log(f"      Musique « {job.render.music.name} » : changements de clip calés sur ses temps "
+                f"({beats.bpm:.0f} battements/min)")
     for warning in plan.warnings:
         log(f"      Attention : {warning}")
     _log_plan(plan, log)
@@ -154,6 +162,20 @@ def render_short(prepared: Prepared, analysis: Analysis, plan: EditPlan, job: Jo
 
 def title_for(source: Source, analysis: Analysis, job: JobSettings) -> str:
     return job.title or analysis.title or source.title
+
+
+_BEATS: dict[tuple[str, float], Beats | None] = {}
+
+
+def music_beats(music: Path) -> Beats | None:
+    """Temps de la musique, gardés en mémoire (chaque avis dans l'aperçu refait le choix des clips)."""
+    try:
+        key = (str(music.resolve()), music.stat().st_mtime)
+    except OSError:
+        return None
+    if key not in _BEATS:
+        _BEATS[key] = detect_beats(music)
+    return _BEATS[key]
 
 
 def analysis_cache(work_dir: Path, job: JobSettings) -> Path:
@@ -290,7 +312,8 @@ def _plan_json(plan: EditPlan) -> str:
          "cri": c.shout.text if c.shout else None, "moment": c.moment.model_dump()}
         for c in plan.clips
     ]
-    return json.dumps({"duree_totale": round(plan.total, 2), "clips": clips}, ensure_ascii=False, indent=2)
+    return json.dumps({"duree_totale": round(plan.total, 2), "fondu": plan.transition,
+                       "musique_debut": plan.music_start, "clips": clips}, ensure_ascii=False, indent=2)
 
 
 def _minutes(seconds: float) -> str:
