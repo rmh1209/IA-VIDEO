@@ -8,6 +8,8 @@ Tu donnes un lien YouTube (résumé de match ou compilation) et hoopcut produit 
 - de la **musique** sous le son du match ;
 - **aucun ralenti**.
 
+Avant le montage, tu **regardes les clips choisis** : ils passent tout seuls, l'un après l'autre, habillés comme dans le short. Un bouton pour valider, un autre pour dire ce qui ne va pas dans un clip : hoopcut le corrige et **apprend de tes avis**.
+
 Il prépare aussi un fichier texte avec un titre, une description et des hashtags prêts à coller au moment de publier.
 
 **L'IA tourne sur ton PC** : gratuite, sans clé, et rien n'est envoyé sur Internet (à part le téléchargement de la vidéo YouTube). Une option permet d'utiliser à la place Gemini, l'IA en ligne de Google (voir plus bas).
@@ -41,9 +43,41 @@ Les gros fichiers (IA, vidéos téléchargées, analyses) vont dans `hoopcut-don
 
 ## Utilisation
 
-**Double-clique sur `hoopcut.bat`**, colle le lien YouTube et appuie sur Entrée. Tu peux aussi glisser une vidéo de ton PC sur `hoopcut.bat`.
+1. **Double-clique sur `hoopcut.bat`** : une page s'ouvre dans ton navigateur. Laisse la fenêtre noire ouverte, c'est elle qui fait le travail.
+2. **Colle le lien YouTube** et clique sur « Créer le short ». Les vidéos déjà analysées sont proposées en dessous : elles s'ouvrent tout de suite.
+3. **Regarde l'aperçu** : les clips choisis passent tout seuls, l'un après l'autre, avec le titre, le score et la légende du short.
+4. **Clique sur « Valider le short »**. Le montage prend une à deux minutes. Ensuite :
+   - « Ouvrir le dossier » montre le short dans `sorties/` ;
+   - « Copier le texte » copie le titre, la description et les hashtags à coller au moment de publier.
 
-Le short arrive dans le dossier `sorties/`, qui s'ouvre tout seul à la fin, avec son fichier `.txt` pour la publication.
+Le petit crayon ✏️ à côté du titre permet de le changer.
+
+### Un clip n'est pas bon ?
+
+Pendant qu'il passe, clique sur « Ce clip n'est pas bon ». Il repasse en boucle, et tu choisis la raison :
+
+| Raison | Ce que fait hoopcut |
+|---|---|
+| Il ne se passe rien, action sans intérêt, ralenti/public/banc, autre | Retire le clip et le remplace par une autre action si la durée le demande. |
+| Coupé trop tôt | Garde 2 s de plus après l'action. |
+| Démarre trop tard | Garde 2 s de plus avant l'action. |
+| Trop long | Retire 2 s avant l'action. |
+| Mauvaise légende | Tu corriges l'action ou le joueur. Une faute d'orthographe est corrigée partout dans la vidéo. |
+
+Tu peux ajouter un mot d'explication. Les retouches d'une vidéo sont gardées : si tu la rouvres, tu retrouves ton short tel que tu l'as laissé.
+
+### hoopcut apprend de tes avis
+
+Chaque avis est noté dans `hoopcut-donnees\avis\avis.jsonl`, avec une petite image du clip (début, action, fin) dans `hoopcut-donnees\avis\images`. Dès le short suivant, hoopcut en tient compte :
+- **les marges** : si tu dis souvent « coupé trop tôt » ou « démarre trop tard », tous les clips gardent plus de jeu autour de l'action ;
+- **les types d'action** : un type que tu juges souvent « sans intérêt » (les lancers francs, par exemple) est évité ;
+- **les noms** : un nom mal écrit que tu as corrigé est corrigé dans les vidéos suivantes, quand le bon nom figure dans leur titre ou leur description.
+
+La page d'accueil résume ce qui a été appris. L'IA elle-même n'est pas réentraînée : ce serait trop lourd pour un PC. Ton journal d'avis sert aussi à améliorer ses consignes, là où elle se trompe le plus.
+
+### Sans aperçu
+
+`hoopcut.bat "https://youtu.be/…"` (lien donné directement, ou vidéo glissée sur `hoopcut.bat`) fait tout d'un coup, sans aperçu. Il respecte les retouches déjà faites dans l'aperçu et ce qui a été appris. Le short arrive dans `sorties/`, avec son fichier `.txt` pour la publication.
 
 ### Combien de temps ça prend
 
@@ -51,17 +85,20 @@ Sur une GTX 1660 SUPER, compte **à peu près la durée de la vidéo, voire une 
 - le résumé ASVEL-Maccabi de 15 min 30 : 16 min ;
 - la compilation de dunks de 10 min, très découpée : 15 min.
 
-La fenêtre affiche l'avancement et le temps restant. Pour une analyse plus fine mais deux fois plus longue, ajoute `--ips 2`.
+La page affiche l'avancement et le temps restant, et l'onglet du navigateur aussi : tu peux faire autre chose en attendant. Pour une analyse plus fine mais deux fois plus longue, ajoute `--ips 2`.
 
 - L'analyse est gardée : refaire un short de la même vidéo (autre focus, autre musique, autre ordre) ne prend qu'une à deux minutes.
-- Si tu fermes la fenêtre pendant l'analyse, relance simplement : elle reprend là où elle s'était arrêtée.
+- Si tu fermes la fenêtre noire pendant l'analyse, relance simplement : elle reprend là où elle s'était arrêtée.
 
 ### Avec des options
 
 Ouvre un terminal dans le dossier du projet (clic droit dans le dossier, « Ouvrir dans le terminal ») :
 
 ```
-# Centré sur un joueur (le nom de famille suffit)
+# L'aperçu dans le navigateur, avec des options (elles commencent toutes par --)
+.\hoopcut.bat --focus-joueur "Parker" --sans-musique
+
+# Centré sur un joueur (le nom de famille suffit), sans aperçu
 .\hoopcut.bat "https://youtu.be/oJd_NbZx9VA" --focus-joueur "Parker"
 
 # Centré sur une équipe, avec ton propre titre
@@ -100,20 +137,21 @@ Dépose tes musiques **libres de droits** dans le dossier `musique/`. hoopcut en
 | `--ia gemini` | Utilise Gemini (en ligne) au lieu de l'IA locale. |
 | `--analyse-seulement` | Affiche les actions repérées, sans monter la vidéo. |
 | `--reanalyser` | Refait l'analyse au lieu de réutiliser la précédente. |
+| `--sans-apprentissage` | Ne tient pas compte de ce qui a été appris des avis. |
 
 La liste complète s'affiche avec `.\hoopcut.bat --help`.
 
-## Retoucher les choix de l'IA
+## Retoucher les choix de l'IA à la main
 
-L'analyse est enregistrée dans `hoopcut-donnees\travail\<identifiant de la vidéo>\analyse_locale.json` (`analyse_gemini.json` avec Gemini). Tu peux y corriger un nom de joueur, une note de spectacle, ou marquer une action comme ralenti (`"replay": true`).
+Le plus simple est l'aperçu (voir plus haut). Ses retouches sont dans `hoopcut-donnees\travail\<identifiant de la vidéo>\retouches.json`.
 
-Relance ensuite la même commande : l'analyse n'est pas refaite, et le short est remonté en une à deux minutes avec tes corrections.
+L'analyse elle-même est dans `analyse_locale.json` (`analyse_gemini.json` avec Gemini), au même endroit. Tu peux y corriger une note de spectacle, ou marquer une action comme ralenti (`"replay": true`). Relance ensuite : l'analyse n'est pas refaite, et le short est remonté en une à deux minutes avec tes corrections.
 
 Les noms de joueurs viennent des commentaires, mais seuls les noms sûrs sont affichés :
 - ceux écrits dans le titre ou la description YouTube, avec leur orthographe (« Fodzo Dada » et non « Fuzo Dada ») ;
 - ceux que l'IA reconnaît comme de vrais joueurs, orthographe corrigée (« Lemon yama » devient « Victor Wembanyama »).
 
-Les autres noms, souvent mal entendus, sont retirés, et la légende montre alors l'équipe (« DUNK · VIL »). C'est fréquent pour les championnats moins connus de l'IA. Pour afficher un nom, écris-le dans le champ `"player"` de l'action, dans ce fichier.
+Les autres noms, souvent mal entendus, sont retirés, et la légende montre alors l'équipe (« DUNK · VIL »). C'est fréquent pour les championnats moins connus de l'IA. Pour afficher un nom, utilise « Mauvaise légende » dans l'aperçu.
 
 ## Option Gemini (IA en ligne de Google)
 
@@ -128,6 +166,8 @@ Coût : environ **0,10 à 0,40 $ pour un résumé de 5 à 10 minutes** (`gemini-
 
 ## Problèmes fréquents
 
+- **La page ne s'ouvre pas** : ouvre toi-même l'adresse affichée dans la fenêtre noire (en général http://127.0.0.1:8765).
+- **« hoopcut ne répond plus »** dans la page : la fenêtre noire a été fermée. Relance `hoopcut.bat`.
 - **« L'IA locale n'est pas installée »** : double-clique sur `installer.bat`.
 - **« Le moteur local s'est arrêté au démarrage »** : la mémoire de la carte graphique est sans doute pleine. Ferme les jeux et logiciels de montage, puis relance. Le détail est dans `ia_locale.log`, à côté de l'analyse.
 - **« FFmpeg est introuvable »** : installe FFmpeg, puis rouvre le terminal.
@@ -162,7 +202,10 @@ hoopcut/
   overlay.py        habillage PNG (titre, score, légende) avec Pillow
   render.py         montage FFmpeg (vertical, fond flou, fondus, musique, volume -14 LUFS)
   heuristic.py      mode --sans-ia (volume sonore)
-  pipeline.py       enchaînement des étapes
+  pipeline.py       enchaînement des étapes (prepare, choose, render_short)
+  feedback.py       retouches d'une vidéo, journal des avis et ce qui en est appris
+  interface.py      serveur web local (127.0.0.1 seulement) de l'aperçu
+  interface.html    la page de l'aperçu (HTML, CSS et JavaScript, sans dépendance)
   cli.py            ligne de commande
 ```
 

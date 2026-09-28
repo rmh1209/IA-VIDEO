@@ -37,6 +37,7 @@ class SelectionSettings:
     cost_per_second: float = 0.55  # un clip n'entre que s'il « vaut » plus que le temps qu'il occupe
     single_shot: bool = False  # clip limité au plan du geste décisif (compilation : un plan = une action)
     min_spectacular: int = 0  # si assez d'actions atteignent cette note, les autres sont laissées de côté
+    type_bonus: dict[str, float] = field(default_factory=dict)  # appris des avis : types d'action préférés
 
     @property
     def focus(self) -> bool:
@@ -130,7 +131,11 @@ def _window(
     slack: float,
 ) -> Clip | None:
     key = min(max(m.key, m.start), m.end)
+    # Retouches demandées dans l'aperçu : plus (ou moins) de jeu avant ou après le geste
+    more_before, more_after = max(0.0, m.extra_before), max(0.0, m.extra_after)
+    pre, post = max(1.0, pre + m.extra_before), max(0.6, post + m.extra_after)
     low, high = _bounds(m, cuts, duration, slack)
+    low, high = max(0.0, low - more_before), min(duration, high + more_after)
     shot = _shot(key, cuts, duration) if s.single_shot else None
     if shot:
         low, high = max(low, shot[0]), min(high, shot[1])
@@ -143,8 +148,9 @@ def _window(
             end = replay.start - FRAME
         if start < replay.end <= key:
             start = replay.end + FRAME
-    if end - start > s.max_clip:
-        start = end - s.max_clip
+    longest = s.max_clip + more_before + more_after
+    if end - start > longest:
+        start = end - longest
     if end - start < s.min_clip:
         start, end = _widen(start, end, *_bounds(m, cuts, duration, max(slack, 1.5)), s.min_clip)
         if shot:  # même élargi, le clip ne sort pas du plan de l'action
@@ -202,7 +208,7 @@ def _widen(start: float, end: float, low: float, high: float, target: float) -> 
 def _score(clips: list[Clip], analysis: Analysis, s: SelectionSettings) -> None:
     for clip in clips:
         m = clip.moment
-        value = 0.65 * m.spectacular + 0.35 * m.importance
+        value = 0.65 * m.spectacular + 0.35 * m.importance + s.type_bonus.get(m.action, 0.0)
         if analysis.video_type == "match" and m.start >= 0.85 * analysis.source_duration and m.importance >= 7:
             value += 1.5  # le dénouement du match
         if not clip.focus:

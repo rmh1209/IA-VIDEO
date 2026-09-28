@@ -91,6 +91,8 @@ def build_parser() -> argparse.ArgumentParser:
     misc.add_argument("--dossier-travail", type=Path, default=data_dir() / "travail",
                       help="vidéos téléchargées et analyses (défaut : %(default)s, hors OneDrive)")
     misc.add_argument("--dossier-sortie", type=Path, default=Path("sorties"))
+    misc.add_argument("--sans-apprentissage", action="store_true",
+                      help="ne pas tenir compte des avis donnés dans l'aperçu (hoopcut.bat sans lien)")
     return parser
 
 
@@ -135,6 +137,7 @@ def job_from_args(args: argparse.Namespace) -> JobSettings:
             original_volume=args.volume_original,
             accent=args.couleur,
         ),
+        avis_dir=None if args.sans_apprentissage else data_dir() / "avis",
     )
 
 

@@ -9,6 +9,7 @@ from typing import Callable
 
 from .analyze import AnalysisError, GeminiSettings, analyze_with_gemini, make_analysis_proxy
 from .analyze_local import LOCAL_POST_ROLL, LocalSettings, analyze_local
+from .feedback import JOURNAL_FILE, Edits, Learned, learn
 from .fetch import Source, fetch
 from .ffmpeg_utils import probe, require_ffmpeg
 from .heuristic import analyze_heuristic
@@ -37,12 +38,36 @@ class JobSettings:
     gemini: GeminiSettings = field(default_factory=GeminiSettings)
     selection: SelectionSettings = field(default_factory=SelectionSettings)
     render: RenderSettings = field(default_factory=RenderSettings)
+    avis_dir: Path | None = None  # journal des avis donnés dans l'aperçu (None : on n'en tient pas compte)
+
+
+@dataclass
+class Prepared:
+    """Vidéo prête à monter : source récupérée, plans repérés, analyse faite (ou relue)."""
+
+    source: Source
+    proxy: Path  # copie allégée (720p, H.264), même chronologie que la source
+    cuts: list[float]
+    analysis: Analysis  # telle que sortie de l'IA, avant retouches
 
 
 def run_job(source_arg: str, job: JobSettings, log: Log = print) -> Path | None:
+    prepared = prepare(source_arg, job, log)
+    if job.analyze_only:
+        return None
+    if prepared.analysis.source_has_music and job.render.music and job.render.original_volume > 0.5:
+        log("      Conseil : la vidéo source a déjà une musique. Pour éviter deux musiques en même temps, "
+            "ajoute --volume-original 0.3 ou --sans-musique.")
+    analysis, plan = choose(prepared, job, log)
+    return render_short(prepared, analysis, plan, job, log)
+
+
+def prepare(source_arg: str, job: JobSettings, log: Log = print,
+            progress: Callable[[float], None] | None = None) -> Prepared:
+    """Étapes 1 à 3 : récupération, changements de plan, analyse. `progress` suit le téléchargement."""
     require_ffmpeg()
     log("[1/5] Récupération de la vidéo")
-    source = fetch(source_arg, job.work_root, cookies_browser=job.cookies_browser, log=log)
+    source = fetch(source_arg, job.work_root, cookies_browser=job.cookies_browser, log=log, progress=progress)
     log(f"      {source.title} ({_minutes(source.info.duration)})")
     proxy = make_analysis_proxy(source.path, source.work_dir / "analyse_720p.mp4")
 
@@ -52,13 +77,19 @@ def run_job(source_arg: str, job: JobSettings, log: Log = print) -> Path | None:
 
     analysis = _analysis(source, proxy, cuts, job, log)
     _log_moments(analysis, log)
-    if job.analyze_only:
-        return None
-    if analysis.source_has_music and job.render.music and job.render.original_volume > 0.5:
-        log("      Conseil : la vidéo source a déjà une musique. Pour éviter deux musiques en même temps, "
-            "ajoute --volume-original 0.3 ou --sans-musique.")
+    return Prepared(source, proxy, cuts, analysis)
 
+
+def choose(prepared: Prepared, job: JobSettings, log: Log = print,
+           learned: Learned | None = None) -> tuple[Analysis, EditPlan]:
+    """Étape 4 : les clips du short, en tenant compte des retouches faites dans l'aperçu et de ce
+    qui a été appris des avis. Renvoie l'analyse retouchée (légendes corrigées…) et les clips."""
     log("[4/5] Choix des meilleurs moments")
+    if learned is None:
+        learned = learn(job.avis_dir / JOURNAL_FILE) if job.avis_dir else Learned()
+    source = prepared.source
+    analysis = learned.fix_names(prepared.analysis, f"{source.title} {source.description or ''}")
+    analysis = Edits.load(source.work_dir).apply(analysis)
     selection = job.selection
     if analysis.analyzer == "locale" and selection.post_roll < LOCAL_POST_ROLL:
         # L'IA locale situe le geste décisif à 1 ou 2 s près : on garde un peu plus de jeu après
@@ -67,15 +98,24 @@ def run_job(source_arg: str, job: JobSettings, log: Log = print) -> Path | None:
         # Dans une compilation, chaque plan vient d'un autre match : un clip ne doit pas en déborder.
         # Les clips sont alors courts : on n'y met que des actions très spectaculaires s'il y en a assez.
         selection = replace(selection, single_shot=True, min_spectacular=max(selection.min_spectacular, 7))
-    plan = select_clips(analysis, cuts, selection)
+    selection = learned.tune(selection)
+    if learned.summary():
+        log("      Appris de tes avis : " + " ; ".join(learned.summary()))
+    plan = select_clips(analysis, prepared.cuts, selection)
     if not plan.clips:
         raise AnalysisError("Aucune action exploitable dans cette vidéo.")
     for warning in plan.warnings:
         log(f"      Attention : {warning}")
     _log_plan(plan, log)
+    return analysis, plan
 
+
+def render_short(prepared: Prepared, analysis: Analysis, plan: EditPlan, job: JobSettings,
+                 log: Log = print) -> Path:
+    """Étape 5 : le short vertical, et le texte prêt à coller pour la publication."""
     log("[5/5] Montage vertical")
-    title = job.title or analysis.title or source.title
+    source = prepared.source
+    title = title_for(source, analysis, job)
     out = job.out_root / f"{_output_name(source, job)}.mp4"
     render_plan(plan, source.path, source.info, build_overlays(plan, analysis, title, job), out,
                 source.work_dir, job.render, log)
@@ -84,6 +124,10 @@ def run_job(source_arg: str, job: JobSettings, log: Log = print) -> Path | None:
     write_publication(out.with_suffix(".txt"), analysis, plan, source, title)
     (source.work_dir / "montage.json").write_text(_plan_json(plan), encoding="utf-8")
     return out
+
+
+def title_for(source: Source, analysis: Analysis, job: JobSettings) -> str:
+    return job.title or analysis.title or source.title
 
 
 def analysis_cache(work_dir: Path, job: JobSettings) -> Path:
@@ -131,7 +175,7 @@ def build_overlays(plan: EditPlan, analysis: Analysis, title: str, job: JobSetti
     overlays = []
     for index, clip in enumerate(plan.clips):
         m = clip.moment
-        content = OverlayContent(title=title, tag=tag, caption=_caption(m, analysis))
+        content = OverlayContent(title=title, tag=tag, caption=caption_for(m, analysis))
         if with_score:
             content.team_a, content.team_b = analysis.team_a, analysis.team_b
             if index == len(plan.clips) - 1 and clip is latest and analysis.has_final_score:
@@ -154,7 +198,7 @@ def _tag(analysis: Analysis, job: JobSettings) -> str | None:
     return {"match": "RÉSUMÉ DU MATCH", "compilation": "COMPILATION"}.get(analysis.video_type)
 
 
-def _caption(m, analysis: Analysis) -> str | None:
+def caption_for(m, analysis: Analysis) -> str | None:
     if analysis.analyzer == "heuristique":
         return None
     if m.player:

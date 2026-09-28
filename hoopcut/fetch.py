@@ -33,9 +33,11 @@ class Source:
     description: str | None = None  # description YouTube : noms des joueurs bien écrits, crédits musique…
 
 
-def fetch(source: str, work_root: Path, *, cookies_browser: str | None = None, log: Callable = print) -> Source:
+def fetch(source: str, work_root: Path, *, cookies_browser: str | None = None, log: Callable = print,
+          progress: Callable[[float], None] | None = None) -> Source:
+    """`progress` reçoit la part téléchargée (0 à 1) de chaque fichier (image, puis son)."""
     if URL.match(source):
-        return _download(source, work_root, cookies_browser, log)
+        return _download(source, work_root, cookies_browser, log, progress)
     path = Path(source).expanduser()
     if not path.is_file():
         raise FileNotFoundError(f"Fichier introuvable : {path}")
@@ -53,12 +55,20 @@ def fetch(source: str, work_root: Path, *, cookies_browser: str | None = None, l
     )
 
 
-def _download(url: str, work_root: Path, cookies_browser: str | None, log: Callable) -> Source:
+def _download(url: str, work_root: Path, cookies_browser: str | None, log: Callable,
+              progress: Callable[[float], None] | None = None) -> Source:
     import yt_dlp
 
     options = {"quiet": True, "no_warnings": True, "noplaylist": True}
     if cookies_browser:
         options["cookiesfrombrowser"] = (cookies_browser,)
+    if progress:
+        def hook(status: dict) -> None:
+            total = status.get("total_bytes") or status.get("total_bytes_estimate")
+            if status.get("status") == "downloading" and total:
+                progress(min(1.0, (status.get("downloaded_bytes") or 0) / total))
+
+        options["progress_hooks"] = [hook]
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
             meta = ydl.extract_info(url, download=False)

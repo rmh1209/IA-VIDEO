@@ -1,24 +1,22 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+title hoopcut - laisse cette fenetre ouverte
 if not defined HOOPCUT_DONNEES set "HOOPCUT_DONNEES=%USERPROFILE%\hoopcut-donnees"
 set "PY=%HOOPCUT_DONNEES%\venv\Scripts\python.exe"
 if not exist "%PY%" goto :pas_installe
 
-rem Avec des arguments (ou une video glissee sur ce fichier) : on les passe tels quels
-if not "%~1"=="" goto :direct
+rem Double-clic, ou seulement des options (--focus-joueur...) : l'apercu s'ouvre dans le navigateur.
+rem Avec un lien ou une video (glissee sur ce fichier) : tout d'un coup, sans apercu.
+if "%~1"=="" goto :interface
+if "%~1"=="--help" goto :direct
+set "PREMIER=%~1"
+if "%PREMIER:~0,2%"=="--" goto :interface
+goto :direct
 
-echo.
-echo === hoopcut : un short basket de 60 a 80 secondes ===
-echo.
-set "LIEN="
-set /p "LIEN=Colle le lien YouTube (ou glisse une video ici), puis appuie sur Entree : "
-if not defined LIEN exit /b 0
-set "LIEN=%LIEN:"=%"
-"%PY%" -m hoopcut "%LIEN%"
-echo.
-if exist "sorties" start "" "%~dp0sorties"
-pause
+:interface
+"%PY%" -m hoopcut.interface %*
+if errorlevel 1 pause
 exit /b 0
 
 :direct

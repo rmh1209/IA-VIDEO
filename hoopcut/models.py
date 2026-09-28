@@ -97,6 +97,8 @@ class Moment(BaseModel):
     replay: bool = False
     score_a: Optional[int] = None
     score_b: Optional[int] = None
+    extra_before: float = 0.0  # retouche : secondes de jeu en plus avant le geste (en moins si < 0)
+    extra_after: float = 0.0  # retouche : secondes de jeu en plus après le geste
 
     @property
     def label(self) -> str:

@@ -21,12 +21,13 @@ dev = ["pytest>=8"]
 
 [project.scripts]
 hoopcut = "hoopcut.cli:main"
+hoopcut-interface = "hoopcut.interface:main"
 
 [tool.setuptools.packages.find]
 include = ["hoopcut*"]
 
 [tool.setuptools.package-data]
-hoopcut = ["assets/fonts/*"]
+hoopcut = ["assets/fonts/*", "interface.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

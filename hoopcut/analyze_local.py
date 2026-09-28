@@ -969,11 +969,21 @@ def plausible_fix(heard: str, fixed: str) -> bool:
     return max(SequenceMatcher(None, squeezed, b[-1]).ratio(), SequenceMatcher(None, a[-1], b[-1]).ratio()) >= 0.7
 
 
+_CLAUSE = re.compile(
+    r"\s+(?=(?:avec|grâce à|pour|face (?:à|au|aux)|contre|après|devant|malgré|lors d[eu])\s)|\s*[:,;]\s+|\s+[-–—]\s+",
+    re.I,
+)
+
+
 def short_title(title: str, limit: int = 60) -> str:
-    """Titre coupé entre deux mots (jamais au milieu d'un mot), sans petit mot ni ponctuation qui traîne."""
+    """Titre raccourci entre deux parties de phrase si possible (« … européenne | avec Tony Parker »),
+    sinon entre deux mots, sans petit mot ni ponctuation qui traîne : jamais « … avec Tony »."""
     title = " ".join(title.split())
     if len(title) <= limit:
         return title
+    clauses = [m.start() for m in _CLAUSE.finditer(title) if 20 <= m.start() <= limit]
+    if clauses:
+        return title[:clauses[-1]].rstrip(" :,;-–—")
     cut = title[:limit + 1].rsplit(" ", 1)[0]
     words = cut.split()
     while words and (fold(words[-1]) in {"et", "de", "du", "des", "la", "le", "les", "en", "au", "aux", "a", "pour",

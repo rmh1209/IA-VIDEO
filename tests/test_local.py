@@ -227,6 +227,11 @@ def test_titles_are_cut_between_words():
     assert short_title("Les plus beaux dunks de tous les temps en une seule vidéo") == \
         "Les plus beaux dunks de tous les temps en une seule vidéo"
     assert short_title("Les dunks  les plus fous") == "Les dunks les plus fous"
+    # coupé entre deux parties de phrase plutôt qu'au milieu d'un nom (« … avec Tony »)
+    assert short_title("ASVEL bat Maccabi Tel Aviv en première européenne avec Tony Parker") == \
+        "ASVEL bat Maccabi Tel Aviv en première européenne"
+    assert short_title("Olympiacos s'impose face au Real Madrid pour la Coupe de l'EuroLeague") == \
+        "Olympiacos s'impose face au Real Madrid"
 
 
 def test_player_names_must_have_been_heard():

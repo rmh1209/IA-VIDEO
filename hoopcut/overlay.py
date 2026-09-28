@@ -52,6 +52,20 @@ def draw_overlay(
     accent: str = "#FF7A00",
     size: tuple[int, int] = (1080, 1920),
 ) -> Path:
+    canvas = overlay_image(content, video_top=video_top, video_bottom=video_bottom, accent=accent, size=size)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(path)
+    return path
+
+
+def overlay_image(
+    content: OverlayContent,
+    *,
+    video_top: int,
+    video_bottom: int,
+    accent: str = "#FF7A00",
+    size: tuple[int, int] = (1080, 1920),
+) -> Image.Image:
     content = replace(content, **{k: _printable(v) for k, v in vars(content).items() if isinstance(v, str)})
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
     accent_rgb = ImageColor.getrgb(accent)[:3]
@@ -71,10 +85,7 @@ def draw_overlay(
         for line in lines:
             _text(canvas, (center_x, y + line_height // 2), line, font, accent_rgb)
             y += line_height
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(path)
-    return path
+    return canvas
 
 
 def _draw_title_block(canvas: Image.Image, content: OverlayContent, cx: int, video_top: int, accent) -> None:
@@ -100,11 +111,10 @@ def _draw_title_block(canvas: Image.Image, content: OverlayContent, cx: int, vid
 
 def _draw_score_panel(canvas: Image.Image, content: OverlayContent, cx: int, top: int, accent) -> int:
     width, height = 920, 180
-    box = (cx - width // 2, top, cx + width // 2, top + height)
-    panel = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(panel)
-    draw.rounded_rectangle(box, radius=34, fill=(12, 12, 16, 215), outline=accent + (255,), width=4)
-    canvas.alpha_composite(panel)
+    panel = Image.new("RGBA", (width + 1, height + 1), (0, 0, 0, 0))
+    ImageDraw.Draw(panel).rounded_rectangle((0, 0, width, height), radius=34, fill=(12, 12, 16, 215),
+                                            outline=accent + (255,), width=4)
+    canvas.alpha_composite(panel, dest=(cx - width // 2, top))
 
     _text(canvas, (cx, top + 40), content.score_label.upper(), _font(36), accent, shadow=False)
     score = f"{content.score_a}  -  {content.score_b}"
@@ -124,11 +134,9 @@ def _pill(canvas: Image.Image, cx: int, cy: int, text: str, accent) -> None:
     font, lines = _fit(text, MAX_TEXT_WIDTH - 60, 1, 38, 26)
     text_width = int(font.getlength(lines[0]))
     half_w, half_h = text_width // 2 + 28, 32
-    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ImageDraw.Draw(layer).rounded_rectangle(
-        (cx - half_w, cy - half_h, cx + half_w, cy + half_h), radius=half_h, fill=accent + (255,)
-    )
-    canvas.alpha_composite(layer)
+    layer = Image.new("RGBA", (2 * half_w + 1, 2 * half_h + 1), (0, 0, 0, 0))
+    ImageDraw.Draw(layer).rounded_rectangle((0, 0, 2 * half_w, 2 * half_h), radius=half_h, fill=accent + (255,))
+    canvas.alpha_composite(layer, dest=(cx - half_w, cy - half_h))
     _text(canvas, (cx, cy), lines[0], font, (15, 15, 18), shadow=False)
 
 
@@ -139,10 +147,19 @@ def _text(canvas: Image.Image, center: tuple[int, int], text: str, font, fill, s
     x = center[0] - (left + right) / 2
     y = center[1] - (top + bottom) / 2
     if shadow:
-        layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-        ImageDraw.Draw(layer).text((x, y + 6), text, font=font, fill=(0, 0, 0, 180), anchor="ls")
-        canvas.alpha_composite(layer.filter(ImageFilter.GaussianBlur(8)))
+        # L'ombre (texte flouté, décalé de 6 px) n'est calculée qu'autour du texte : bien plus rapide
+        box = _clip_box((x + left - 30, y + 6 + top - 30, x + right + 30, y + 6 + bottom + 30), canvas.size)
+        if box:
+            layer = Image.new("RGBA", (box[2] - box[0], box[3] - box[1]), (0, 0, 0, 0))
+            ImageDraw.Draw(layer).text((x - box[0], y + 6 - box[1]), text, font=font, fill=(0, 0, 0, 180), anchor="ls")
+            canvas.alpha_composite(layer.filter(ImageFilter.GaussianBlur(8)), dest=box[:2])
     draw.text((x, y), text, font=font, fill=tuple(fill) + (255,), anchor="ls")
+
+
+def _clip_box(box: tuple[float, float, float, float], size: tuple[int, int]) -> tuple[int, int, int, int] | None:
+    left, top = max(0, int(box[0])), max(0, int(box[1]))
+    right, bottom = min(size[0], int(box[2]) + 1), min(size[1], int(box[3]) + 1)
+    return (left, top, right, bottom) if right > left and bottom > top else None
 
 
 def _printable(text: str) -> str:
