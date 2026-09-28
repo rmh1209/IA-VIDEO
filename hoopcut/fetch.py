@@ -13,6 +13,7 @@ from .ffmpeg_utils import MediaInfo, probe
 from .text_utils import slugify
 
 URL = re.compile(r"^https?://", re.I)
+YOUTUBE_ID = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?(?:[^#]*&)?v=|shorts/|live/|embed/))([\w-]{11})")
 # H.264 jusqu'en 1080p de préférence (décodage rapide partout), sinon le meilleur disponible
 FORMAT = "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/b"
 
@@ -57,6 +58,9 @@ def fetch(source: str, work_root: Path, *, cookies_browser: str | None = None, l
 
 def _download(url: str, work_root: Path, cookies_browser: str | None, log: Callable,
               progress: Callable[[float], None] | None = None) -> Source:
+    cached = _already_downloaded(url, work_root)
+    if cached:
+        return cached
     import yt_dlp
 
     options = {"quiet": True, "no_warnings": True, "noplaylist": True}
@@ -103,6 +107,25 @@ def _download(url: str, work_root: Path, cookies_browser: str | None, log: Calla
     )
     return Source(path=path, work_dir=work_dir, slug=slugify(title), title=title, uploader=uploader, url=page,
                   info=probe(path), description=description)
+
+
+def _already_downloaded(url: str, work_root: Path) -> Source | None:
+    """Vidéo YouTube déjà téléchargée : reprise telle quelle, sans passer par Internet (instantané,
+    et possible hors connexion)."""
+    match = YOUTUBE_ID.search(url)
+    if not match:
+        return None
+    work_dir = work_root / slugify(match[1], 40)
+    try:
+        meta = json.loads((work_dir / "source.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    path = _existing_source(work_dir)
+    if path is None or not isinstance(meta, dict) or meta.get("id") != match[1]:
+        return None
+    title = meta.get("title") or match[1]
+    return Source(path=path, work_dir=work_dir, slug=slugify(title), title=title, uploader=meta.get("uploader"),
+                  url=meta.get("url") or url, info=probe(path), description=meta.get("description"))
 
 
 def _existing_source(work_dir: Path) -> Path | None:

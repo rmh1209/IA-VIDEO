@@ -16,17 +16,21 @@ _EBUR128 = re.compile(r"t:\s*([0-9.]+)\s+TARGET:.*?M:\s*(-?[0-9.]+|-inf|nan)")
 SILENCE = -70.0
 
 
-def loudness_curve(video: Path) -> list[tuple[float, float]]:
-    """Volume perçu (LUFS « momentary ») toutes les 0,1 s."""
+def loudness_curve(video: Path, start: float = 0.0, duration: float | None = None) -> list[tuple[float, float]]:
+    """Volume perçu (LUFS « momentary », sur les 0,4 s écoulées) toutes les 0,1 s, de toute la vidéo
+    ou d'un extrait (temps donnés dans la vidéo)."""
+    extract = ["-ss", f"{start:.3f}"] if start > 0 else []
+    if duration is not None:
+        extract += ["-t", f"{duration:.3f}"]
     proc = run(
-        ["ffmpeg", "-hide_banner", "-nostdin", "-nostats", "-i", str(video),
+        ["ffmpeg", "-hide_banner", "-nostdin", "-nostats", *extract, "-i", str(video),
          "-vn", "-af", "ebur128=framelog=info", "-f", "null", "-"]
     )
     curve = []
     for match in _EBUR128.finditer(proc.stderr):
         value = match.group(2)
         loudness = SILENCE if value in ("-inf", "nan") else max(SILENCE, float(value))
-        curve.append((float(match.group(1)), loudness))
+        curve.append((round(start + float(match.group(1)), 2), loudness))
     return curve
 
 

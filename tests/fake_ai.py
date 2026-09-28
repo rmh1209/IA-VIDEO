@@ -9,6 +9,21 @@ ACTIONS = ["dunk", "three_pointer", "block", "alley_oop", "steal", "layup", "cro
 PLAYERS = ["Tony Parker", None, "Nando De Colo", "Theo Maledon", None, "Élie Okobo"]
 
 
+SAID = ["What a dunk!", "Il passe au large, rien à signaler.", "Oh my goodness!", "Incroyable !",
+        "And the Spurs bring it back up the floor.", "Quel contre !"]
+
+
+def fake_transcript(scenes: list[tuple[float, float]]) -> dict:
+    """Transcription « comme whisper-cli -oj » : une phrase juste après chaque geste, une sur deux un cri."""
+    items, t = [], 0.0
+    for i, (duration, _) in enumerate(scenes):
+        key = t + 0.7 * duration
+        t += duration
+        items.append({"offsets": {"from": round((key + 0.2) * 1000), "to": round((key + 1.4) * 1000)},
+                      "text": " " + SAID[i % len(SAID)]})
+    return {"result": {"language": "fr"}, "transcription": items}
+
+
 def fake_ai_analysis(scenes: list[tuple[float, float]]) -> AIAnalysis:
     moments = []
     t = 0.0

@@ -39,6 +39,14 @@ REASONS: dict[str, str] = {
     "debut_manque": "Démarre trop tard",
     "trop_long": "Trop long",
     "legende": "Mauvaise légende (action ou joueur)",
+    "cri": "Le texte en gros est faux",
+    "autre": "Autre raison",
+}
+# Pour l'accroche (le clip d'ouverture), des raisons à part
+TEASER_REASONS: dict[str, str] = {
+    "rien": "Pas la bonne action : en prendre une autre",
+    "sans_accroche": "Pas d'accroche du tout",
+    "cri": "Le texte en gros est faux",
     "autre": "Autre raison",
 }
 REMOVING = {"rien", "ennuyeux", "pas_le_jeu", "autre"}  # le clip est retiré (et remplacé si possible)
@@ -70,6 +78,9 @@ class Edits:
     captions: dict[str, dict] = field(default_factory=dict)  # {"action": code, "joueur": nom ou None}
     names: dict[str, str] = field(default_factory=dict)  # nom mal écrit (plié) -> bonne écriture, dans cette vidéo
     title: str | None = None  # titre choisi dans l'aperçu
+    hook: bool = True  # accroche en ouverture
+    no_teaser: set[str] = field(default_factory=set)  # actions refusées comme accroche
+    no_shout: set[str] = field(default_factory=set)  # actions dont le cri affiché était faux
 
     @classmethod
     def load(cls, work_dir: Path) -> "Edits":
@@ -84,6 +95,9 @@ class Edits:
             captions=dict(data.get("legendes", {})),
             names=dict(data.get("noms", {})),
             title=data.get("titre") or None,
+            hook=data.get("accroche", True) is not False,
+            no_teaser=set(data.get("pas_en_accroche", [])),
+            no_shout=set(data.get("sans_cri", [])),
         )
 
     def save(self, work_dir: Path) -> None:
@@ -94,12 +108,23 @@ class Edits:
             "legendes": self.captions,
             "noms": self.names,
             "titre": self.title,
+            "accroche": self.hook,
+            "pas_en_accroche": sorted(self.no_teaser),
+            "sans_cri": sorted(self.no_shout),
         }
         (work_dir / EDITS_FILE).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def add(self, m: Moment, reason: str, action: str | None = None, player: str | None = None) -> None:
+    def add(self, m: Moment, reason: str, action: str | None = None, player: str | None = None,
+            teaser: bool = False) -> None:
         key = moment_id(m)
-        if reason in REMOVING:
+        if reason == "cri":
+            self.no_shout.add(key)
+        elif teaser:
+            if reason == "sans_accroche":
+                self.hook = False
+            else:
+                self.no_teaser.add(key)
+        elif reason in REMOVING:
             self.removed.add(key)
         elif reason == "fin_coupee":
             self.after[key] = self.after.get(key, 0.0) + STEP
@@ -144,6 +169,7 @@ class Learned:
     after: float = 0.0  # secondes ajoutées après
     type_bonus: dict[str, float] = field(default_factory=dict)  # malus de note des types d'action jugés sans intérêt
     names: dict[str, str] = field(default_factory=dict)  # nom mal écrit (plié) -> bonne écriture
+    bad_shouts: set[str] = field(default_factory=set)  # cris refusés au moins deux fois : plus affichés
     opinions: int = 0  # clips jugés : validés ou refusés
 
     def tune(self, s: SelectionSettings) -> SelectionSettings:
@@ -184,6 +210,8 @@ class Learned:
         if self.names:
             lines.append(f"{len(self.names)} nom{'s' if len(self.names) > 1 else ''} de joueur corrigé"
                          f"{'s' if len(self.names) > 1 else ''}")
+        if self.bad_shouts:
+            lines.append("n'affiche plus : " + ", ".join(sorted(self.bad_shouts)))
         return lines
 
 
@@ -196,7 +224,7 @@ def learn(journal: Path) -> Learned:
       (les deux parts partent de USUALLY_KEPT tant qu'il y a peu d'avis).
     - Noms : fautes d'orthographe corrigées dans une légende.
     """
-    kept, boring = Counter(), Counter()
+    kept, boring, wrong_shouts = Counter(), Counter(), Counter()
     names: dict[str, str] = {}
     validations: dict[str, dict] = {}
     refused = 0
@@ -208,7 +236,9 @@ def learn(journal: Path) -> Learned:
             continue
         refused += 1
         moment = entry.get("moment") or {}
-        if entry.get("raison") == "ennuyeux" and moment.get("action"):
+        if entry.get("raison") == "cri" and (entry.get("clip") or {}).get("cri"):
+            wrong_shouts[entry["clip"]["cri"]] += 1
+        if entry.get("raison") == "ennuyeux" and moment.get("action") and not entry.get("accroche"):
             boring[moment["action"]] += 1
         correction = entry.get("correction") or {}
         old, new = moment.get("player"), (correction.get("joueur") or "").strip()
@@ -223,7 +253,8 @@ def learn(journal: Path) -> Learned:
             befores.append(float(settings.get("avant", 0.0)) + float(clip.get("en_plus_avant", 0.0)))
             afters.append(float(settings.get("apres", 0.0)) + float(clip.get("en_plus_apres", 0.0)))
 
-    learned = Learned(names=names, opinions=len(befores) + refused)
+    learned = Learned(names=names, opinions=len(befores) + refused,
+                      bad_shouts={text for text, count in wrong_shouts.items() if count >= 2})
     if len(befores) >= MIN_CLIPS_FOR_TIMING:
         learned.before = _clamp(round(sum(befores) / len(befores), 1), -2.0, 3.0)
         learned.after = _clamp(round(sum(afters) / len(afters), 1), -1.0, 3.0)

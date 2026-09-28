@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from .ffmpeg_utils import MediaInfo, probe, run
-from .overlay import OverlayContent, draw_overlay
+from .overlay import OverlayContent, draw_overlay, shout_center, shout_image
 from .select import EditPlan
 
 # Nom de l'option -> transition FFmpeg (filtre xfade)
@@ -26,7 +26,7 @@ class RenderSettings:
     width: int = 1080
     height: int = 1920
     fps: int = 30
-    zoom: float = 1.0  # > 1 : rogne les côtés de la vidéo pour agrandir l'action
+    zoom: float = 1.25  # rogne les côtés pour agrandir l'action (1,25 : mesuré sans perte d'action sur 72 clips)
     background: str = "flou"  # flou | noir
     transition: str = "fade"  # transition xfade, ou "none"
     music: Path | None = None
@@ -100,20 +100,50 @@ def render_plan(
             accent=rs.accent,
             size=(rs.width, rs.height),
         )
+        shout = None
+        if clip.shout:
+            image = segment_dir / f"cri_{index:02d}.png"
+            shout_image(clip.shout.text).save(image)
+            shout = Shouted(image, clip.shout.start - clip.start, clip.shout.end - clip.start,
+                            shout_center(layout.top, layout.video_height))
         segment = segment_dir / f"clip_{index:02d}.mp4"
-        _render_segment(source, info, clip.start, clip.duration, png, segment, layout, rs)
+        _render_segment(source, info, clip.start, clip.duration, png, segment, layout, rs, shout)
         segments.append(segment)
         durations.append(probe(segment).duration)
 
     log("      Assemblage, fondus et musique…")
     out.parent.mkdir(parents=True, exist_ok=True)
-    _assemble(segments, durations, out, rs, plan.transition)
+    transitions = [rs.transition] * (len(segments) - 1)
+    if transitions and plan.clips[0].teaser:
+        transitions[0] = "fadewhite"  # flash : fin de l'accroche, le récit commence
+    _assemble(segments, durations, out, rs, plan.transition, transitions)
     return out
+
+
+@dataclass
+class Shouted:
+    """Cri à poser sur un clip : image, apparition et disparition (s depuis le début du clip), hauteur."""
+
+    image: Path
+    start: float
+    end: float
+    center_y: int
+
+
+def _shout_filters(shout: Shouted) -> tuple[str, str]:
+    """Le cri « claque » : il grossit d'un coup (0,1 s), se pose, puis s'efface en fondu."""
+    u = f"max(0,t-{shout.start:.3f})"
+    scale = f"if(lt({u},0.1),0.55+5.1*{u},if(lt({u},0.18),1.06-0.75*({u}-0.1),1))"
+    chain = (f"[2:v]format=rgba,scale=w='max(2,trunc(iw*{scale}/2)*2)':h=-2:eval=frame,"
+             f"fade=t=out:st={max(0.0, shout.end - 0.15):.3f}:d=0.15:alpha=1[cri]")
+    place = (f"overlay=x='(W-w)/2':y='{shout.center_y}-h/2':eval=frame:"
+             f"enable='between(t,{shout.start:.3f},{shout.end:.3f})'")
+    return chain, place
 
 
 def _render_segment(
     source: Path, info: MediaInfo, start: float, duration: float, png: Path, out: Path, layout: Layout,
-    rs: RenderSettings,
+    rs: RenderSettings, shout: Shouted | None = None,
 ) -> None:
     zoom = max(rs.zoom, 1.0)
     crop = f"crop=trunc(iw/{zoom:.4f}/2)*2:ih," if zoom > 1.0 else ""
@@ -132,10 +162,12 @@ def _render_segment(
             f"color=c=0x0E0E12:s={rs.width}x{rs.height}:r={rs.fps}:d={duration:.3f}[bg]",
             foreground,
         ]
-    graph += [
-        f"[bg][fg]overlay=x=(W-w)/2:y={layout.top}:shortest=1[base]",
-        "[base][1:v]overlay=0:0:eof_action=repeat,format=yuv420p[v]",
-    ]
+    graph.append(f"[bg][fg]overlay=x=(W-w)/2:y={layout.top}:shortest=1[base]")
+    if shout:
+        chain, place = _shout_filters(shout)
+        graph += ["[base][1:v]overlay=0:0:eof_action=repeat[dressed]", chain, f"[dressed][cri]{place},format=yuv420p[v]"]
+    else:
+        graph.append("[base][1:v]overlay=0:0:eof_action=repeat,format=yuv420p[v]")
     fade = min(0.06, duration / 4)
     if info.has_audio:
         graph.append(
@@ -151,6 +183,9 @@ def _render_segment(
             "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(source),
             # l'habillage est fixe : une image par seconde suffit, le filtre overlay la répète
             "-loop", "1", "-framerate", "1", "-t", f"{duration:.3f}", "-i", str(png),
+            # le cri, lui, est animé : une image par image vidéo
+            *(["-loop", "1", "-framerate", str(rs.fps), "-t", f"{duration:.3f}", "-i", str(shout.image)]
+              if shout else []),
             "-filter_complex", ";".join(graph),
             "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-r", str(rs.fps),
@@ -160,8 +195,10 @@ def _render_segment(
     )
 
 
-def _assemble(segments: list[Path], durations: list[float], out: Path, rs: RenderSettings, fade: float) -> None:
+def _assemble(segments: list[Path], durations: list[float], out: Path, rs: RenderSettings, fade: float,
+              transitions: list[str] | None = None) -> None:
     count = len(segments)
+    kinds = transitions or [rs.transition] * (count - 1)  # transition entre le clip i et le suivant
     use_xfade = rs.transition != "none" and count > 1 and fade > 0
     overlap = fade if use_xfade else 0.0
     total = sum(durations) - overlap * (count - 1)
@@ -183,7 +220,7 @@ def _assemble(segments: list[Path], durations: list[float], out: Path, rs: Rende
         for i in range(1, count):
             offset += durations[i - 1] - overlap
             graph.append(
-                f"[{video}][v{i}]xfade=transition={rs.transition}:duration={overlap:.3f}:offset={offset:.3f}[vx{i}]"
+                f"[{video}][v{i}]xfade=transition={kinds[i - 1]}:duration={overlap:.3f}:offset={offset:.3f}[vx{i}]"
             )
             graph.append(f"[{audio}][a{i}]acrossfade=d={overlap:.3f}:c1=tri:c2=tri[ax{i}]")
             video, audio = f"vx{i}", f"ax{i}"

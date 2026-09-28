@@ -75,17 +75,44 @@ def overlay_image(
 
     y = video_bottom + 44
     if content.has_score:
-        y = _draw_score_panel(canvas, content, center_x, y, accent_rgb) + 34
+        y = _draw_score_panel(canvas, content, center_x, video_bottom + 36, accent_rgb) + 22
     if content.caption:
-        caption_size = 62 if content.has_score else 74
-        font, lines = _fit(content.caption.upper(), MAX_TEXT_WIDTH, 2, caption_size, 36)
+        # Légende aussi grande que possible dans la place qui reste au-dessus des boutons des applis
+        font, lines = _fit(content.caption.upper(), MAX_TEXT_WIDTH, 2, 62 if content.has_score else 74, 30)
+        while int(font.size * 1.12) * len(lines) > SAFE_BOTTOM - y and font.size > 30:
+            font, lines = _fit(content.caption.upper(), MAX_TEXT_WIDTH, 2, font.size - 4, 30)
         line_height = int(font.size * 1.12)
-        if y + line_height * len(lines) > SAFE_BOTTOM:
-            y = SAFE_BOTTOM - line_height * len(lines)
+        y = min(y, SAFE_BOTTOM - line_height * len(lines))
         for line in lines:
             _text(canvas, (center_x, y + line_height // 2), line, font, accent_rgb)
             y += line_height
     return canvas
+
+
+def shout_image(text: str) -> Image.Image:
+    """Cri des commentateurs (« QUEL DUNK ! ») : grosses lettres blanches cernées de noir, image
+    juste à la taille du texte (le montage l'anime et la place)."""
+    font, lines = _fit(_printable(text).upper(), MAX_TEXT_WIDTH - 40, 2, 124, 70)
+    stroke = max(6, font.size // 12)
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    boxes = [measure.textbbox((0, 0), line, font=font, anchor="ls", stroke_width=stroke) for line in lines]
+    line_height = int(font.size * 1.08)
+    margin = stroke + 8
+    width = max(box[2] - box[0] for box in boxes) + 2 * margin
+    height = line_height * (len(lines) - 1) + (boxes[-1][3] - boxes[0][1]) + 2 * margin
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    y = margin - boxes[0][1]
+    for line, box in zip(lines, boxes):
+        draw.text(((width - (box[2] - box[0])) / 2 - box[0], y), line, font=font, anchor="ls", fill=(255, 255, 255, 255),
+                  stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
+        y += line_height
+    return image
+
+
+def shout_center(video_top: int, video_height: int) -> int:
+    """Hauteur du cri : sur le haut de la vidéo, au-dessus du terrain (tribunes), là où il ne cache pas le jeu."""
+    return round(video_top + 0.22 * video_height)
 
 
 def _draw_title_block(canvas: Image.Image, content: OverlayContent, cx: int, video_top: int, accent) -> None:
@@ -110,30 +137,31 @@ def _draw_title_block(canvas: Image.Image, content: OverlayContent, cx: int, vid
 
 
 def _draw_score_panel(canvas: Image.Image, content: OverlayContent, cx: int, top: int, accent) -> int:
-    width, height = 920, 180
+    """Bandeau de score compact (la vidéo prend plus de place) ; « SCORE » est posé sur son bord haut."""
+    width, height = 920, 116
     panel = Image.new("RGBA", (width + 1, height + 1), (0, 0, 0, 0))
-    ImageDraw.Draw(panel).rounded_rectangle((0, 0, width, height), radius=34, fill=(12, 12, 16, 215),
+    ImageDraw.Draw(panel).rounded_rectangle((0, 0, width, height), radius=30, fill=(12, 12, 16, 215),
                                             outline=accent + (255,), width=4)
     canvas.alpha_composite(panel, dest=(cx - width // 2, top))
+    _pill(canvas, cx, top + 2, content.score_label.upper(), accent, size=28, half_height=21)
 
-    _text(canvas, (cx, top + 40), content.score_label.upper(), _font(36), accent, shadow=False)
     score = f"{content.score_a}  -  {content.score_b}"
-    score_font = _font(92)
+    score_font = _font(84)
     score_width = int(score_font.getlength(score))
-    row_y = top + 116
+    row_y = top + height // 2 + 6
     _text(canvas, (cx, row_y), score, score_font, (255, 255, 255), shadow=False)
-    side_width = width // 2 - score_width // 2 - 70
+    side_width = width // 2 - score_width // 2 - 64
     for name, direction in ((content.team_a, -1), (content.team_b, 1)):
-        font, lines = _fit(str(name).upper(), side_width, 1, 60, 30)
-        x = cx + direction * (score_width // 2 + 36 + side_width // 2)
+        font, lines = _fit(str(name).upper(), side_width, 1, 56, 28)
+        x = cx + direction * (score_width // 2 + 32 + side_width // 2)
         _text(canvas, (x, row_y), lines[0], font, (255, 255, 255), shadow=False)
     return top + height
 
 
-def _pill(canvas: Image.Image, cx: int, cy: int, text: str, accent) -> None:
-    font, lines = _fit(text, MAX_TEXT_WIDTH - 60, 1, 38, 26)
+def _pill(canvas: Image.Image, cx: int, cy: int, text: str, accent, size: int = 38, half_height: int = 32) -> None:
+    font, lines = _fit(text, MAX_TEXT_WIDTH - 60, 1, size, min(size, 26))
     text_width = int(font.getlength(lines[0]))
-    half_w, half_h = text_width // 2 + 28, 32
+    half_w, half_h = text_width // 2 + round(28 * size / 38), half_height
     layer = Image.new("RGBA", (2 * half_w + 1, 2 * half_h + 1), (0, 0, 0, 0))
     ImageDraw.Draw(layer).rounded_rectangle((0, 0, 2 * half_w, 2 * half_h), radius=half_h, fill=accent + (255,))
     canvas.alpha_composite(layer, dest=(cx - half_w, cy - half_h))

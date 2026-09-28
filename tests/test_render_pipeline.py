@@ -1,7 +1,9 @@
 """Tests de bout en bout : vraie vidéo (synthétique), vrai FFmpeg, analyse IA simulée."""
 
+import json
 import shutil
 import subprocess
+import sys
 
 import pytest
 from PIL import Image
@@ -83,6 +85,21 @@ def test_no_ai_mode(tmp_path, source_video):
     assert 12.0 <= probe(out).duration <= 18.1
 
 
+@needs_ffmpeg
+def test_youtube_video_already_downloaded_is_reused_offline(tmp_path, source_video, monkeypatch):
+    work_dir = tmp_path / "travail" / "ojd-nbzx9va"
+    work_dir.mkdir(parents=True)
+    shutil.copy(source_video, work_dir / "source.mp4")
+    (work_dir / "source.json").write_text(json.dumps({
+        "id": "oJd_NbZx9VA", "title": "ASVEL - Maccabi", "uploader": "beIN",
+        "url": "https://www.youtube.com/watch?v=oJd_NbZx9VA", "description": "Tony Parker"}), encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "yt_dlp", None)  # l'importer échouerait : aucun accès à Internet
+    for link in ("https://youtu.be/oJd_NbZx9VA?si=partage", "https://www.youtube.com/watch?v=oJd_NbZx9VA&t=12s"):
+        source = fetch(link, tmp_path / "travail")
+        assert source.work_dir == work_dir and source.title == "ASVEL - Maccabi"
+        assert source.description == "Tony Parker" and source.info.duration > 40
+
+
 def test_overlay_stays_out_of_the_video_and_app_buttons(tmp_path):
     content = OverlayContent(
         title="Un titre beaucoup trop long pour tenir sur une seule ligne, il doit se replier proprement",
@@ -127,6 +144,9 @@ def test_command_line_options(tmp_path):
     assert job.gemini.processing == "agentic"
     assert job.ai == "locale" and job.local.commentary and job.local.fps == 1.0
 
-    gemini = job_from_args(build_parser().parse_args(["video.mp4", "--ia", "gemini", "--sans-commentaires"]))
+    assert job.hook and job.shouts and job.render.zoom == 1.25
+    gemini = job_from_args(build_parser().parse_args(["video.mp4", "--ia", "gemini", "--sans-commentaires",
+                                                      "--sans-accroche", "--sans-cris", "--zoom", "1"]))
     assert gemini.ai == "gemini" and not gemini.local.commentary
+    assert not gemini.hook and not gemini.shouts and gemini.render.zoom == 1.0
     assert analysis_cache(tmp_path, gemini).name == "analyse_gemini.json"

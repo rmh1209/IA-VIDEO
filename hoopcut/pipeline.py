@@ -9,15 +9,17 @@ from typing import Callable
 
 from .analyze import AnalysisError, GeminiSettings, analyze_with_gemini, make_analysis_proxy
 from .analyze_local import LOCAL_POST_ROLL, LocalSettings, analyze_local
-from .feedback import JOURNAL_FILE, Edits, Learned, learn
+from .feedback import JOURNAL_FILE, Edits, Learned, learn, moment_id
 from .fetch import Source, fetch
 from .ffmpeg_utils import probe, require_ffmpeg
 from .heuristic import analyze_heuristic
+from .hook import RESERVE_MAX, RESERVE_MIN, RESERVE_TARGET, teaser
 from .models import Analysis
 from .overlay import OverlayContent
 from .render import RenderSettings, render_plan
 from .select import EditPlan, SelectionSettings, select_clips
 from .shots import load_or_detect_cuts
+from .shouts import commentary, find_shout
 from .text_utils import format_timecode, slugify
 
 Log = Callable[[str], None]
@@ -39,6 +41,8 @@ class JobSettings:
     selection: SelectionSettings = field(default_factory=SelectionSettings)
     render: RenderSettings = field(default_factory=RenderSettings)
     avis_dir: Path | None = None  # journal des avis donnés dans l'aperçu (None : on n'en tient pas compte)
+    hook: bool = True  # la plus belle action en ouverture (hook.py)
+    shouts: bool = True  # cris des commentateurs en gros (shouts.py)
 
 
 @dataclass
@@ -88,9 +92,14 @@ def choose(prepared: Prepared, job: JobSettings, log: Log = print,
     if learned is None:
         learned = learn(job.avis_dir / JOURNAL_FILE) if job.avis_dir else Learned()
     source = prepared.source
+    edits = Edits.load(source.work_dir)
     analysis = learned.fix_names(prepared.analysis, f"{source.title} {source.description or ''}")
-    analysis = Edits.load(source.work_dir).apply(analysis)
+    analysis = edits.apply(analysis)
     selection = job.selection
+    hook = job.hook and edits.hook
+    if hook:  # place gardée pour l'accroche, dont la durée n'est connue qu'après le choix des clips
+        selection = replace(selection, min_total=selection.min_total - RESERVE_MIN,
+                            max_total=selection.max_total - RESERVE_MAX, target=selection.target - RESERVE_TARGET)
     if analysis.analyzer == "locale" and selection.post_roll < LOCAL_POST_ROLL:
         # L'IA locale situe le geste décisif à 1 ou 2 s près : on garde un peu plus de jeu après
         selection = replace(selection, post_roll=LOCAL_POST_ROLL)
@@ -104,6 +113,23 @@ def choose(prepared: Prepared, job: JobSettings, log: Log = print,
     plan = select_clips(analysis, prepared.cuts, selection)
     if not plan.clips:
         raise AnalysisError("Aucune action exploitable dans cette vidéo.")
+    segments = commentary(source.work_dir) if job.shouts else []
+
+    def shout(clip):
+        if moment_id(clip.moment) in edits.no_shout:
+            return None
+        found = find_shout(segments, clip.start, clip.end, clip.moment.key)
+        return None if found is None or found.text in learned.bad_shouts else found
+
+    for clip in plan.clips:
+        clip.shout = shout(clip)
+    if hook:
+        # l'accroche ne déborde ni sur un autre plan ni sur un ralenti
+        limits = sorted(prepared.cuts + [m.start for m in analysis.moments if m.replay])
+        opening = teaser(plan, limits, source.info.duration, edits.no_teaser)
+        if opening:
+            opening.shout = shout(opening)
+            plan.clips.insert(0, opening)
     for warning in plan.warnings:
         log(f"      Attention : {warning}")
     _log_plan(plan, log)
@@ -170,13 +196,14 @@ def _forget_local_analysis(work_dir: Path) -> None:
 def build_overlays(plan: EditPlan, analysis: Analysis, title: str, job: JobSettings) -> list[OverlayContent]:
     """Habillage de chaque clip : titre, étiquette, score (match) et légende de l'action."""
     tag = _tag(analysis, job)
-    latest = max(plan.clips, key=lambda c: c.start) if plan.clips else None
+    story = [c for c in plan.clips if not c.teaser]
+    latest = max(story, key=lambda c: c.start) if story else None
     with_score = job.show_score and analysis.video_type == "match" and analysis.team_a and analysis.team_b
     overlays = []
     for index, clip in enumerate(plan.clips):
         m = clip.moment
         content = OverlayContent(title=title, tag=tag, caption=caption_for(m, analysis))
-        if with_score:
+        if with_score and not clip.teaser:  # l'accroche, hors du récit, n'affiche pas de score
             content.team_a, content.team_b = analysis.team_a, analysis.team_b
             if index == len(plan.clips) - 1 and clip is latest and analysis.has_final_score:
                 content.score_a, content.score_b = analysis.final_score_a, analysis.final_score_b
@@ -220,7 +247,8 @@ def write_publication(path: Path, analysis: Analysis, plan: EditPlan, source: So
     lines.append("CLIPS UTILISÉS (temps dans la vidéo source)")
     for index, clip in enumerate(plan.clips, start=1):
         m = clip.moment
-        lines.append(f"{index:2d}. {format_timecode(clip.start)} -> {format_timecode(clip.end)}  {m.label}  {m.description}")
+        what = "ACCROCHE (extrait d'un clip suivant)" if clip.teaser else f"{m.label}  {m.description}"
+        lines.append(f"{index:2d}. {format_timecode(clip.start)} -> {format_timecode(clip.end)}  {what}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -245,7 +273,9 @@ def _log_plan(plan: EditPlan, log: Log) -> None:
     log(f"      {len(plan.clips)} clips retenus, durée totale {plan.total:.1f} s :")
     for clip in plan.clips:
         m = clip.moment
-        log(f"      {format_timecode(clip.start)} ({clip.duration:4.1f} s)  {m.label:<18} {m.player or m.team or ''}")
+        extra = "  (accroche)" if clip.teaser else ""
+        extra += f"  « {clip.shout.text} »" if clip.shout else ""
+        log(f"      {format_timecode(clip.start)} ({clip.duration:4.1f} s)  {m.label:<18} {m.player or m.team or ''}{extra}")
 
 
 def _output_name(source: Source, job: JobSettings) -> str:
@@ -256,7 +286,8 @@ def _output_name(source: Source, job: JobSettings) -> str:
 
 def _plan_json(plan: EditPlan) -> str:
     clips = [
-        {"debut": c.start, "fin": c.end, "valeur": round(c.value, 2), "moment": c.moment.model_dump()}
+        {"debut": c.start, "fin": c.end, "valeur": round(c.value, 2), "accroche": c.teaser,
+         "cri": c.shout.text if c.shout else None, "moment": c.moment.model_dump()}
         for c in plan.clips
     ]
     return json.dumps({"duree_totale": round(plan.total, 2), "clips": clips}, ensure_ascii=False, indent=2)

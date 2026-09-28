@@ -60,10 +60,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="son du match, 0 à 1 (défaut 1 ; 0 = musique seule)")
     style.add_argument("--transition", choices=list(TRANSITIONS), default="fondu")
     style.add_argument("--fond", choices=["flou", "noir"], default="flou", help="fond derrière la vidéo")
-    style.add_argument("--zoom", type=float, default=1.0,
-                       help="agrandit la vidéo en rognant les côtés (ex. 1.3) ; 1 = image entière")
+    style.add_argument("--zoom", type=float, default=RenderSettings.zoom,
+                       help="agrandit la vidéo en rognant les côtés (défaut %(default)s) ; 1 = image entière")
     style.add_argument("--couleur", default="#FF7A00", help="couleur d'accent (défaut orange #FF7A00)")
     style.add_argument("--sans-score", action="store_true", help="ne pas afficher le score")
+    style.add_argument("--sans-accroche", action="store_true",
+                       help="ne pas ouvrir le short sur la plus belle action (le récit commence tout de suite)")
+    style.add_argument("--sans-cris", action="store_true",
+                       help="ne pas afficher en gros les cris des commentateurs (« QUEL DUNK ! »)")
 
     ai = parser.add_argument_group("IA")
     ai.add_argument("--ia", choices=["locale", "gemini"], default="locale",
@@ -138,6 +142,8 @@ def job_from_args(args: argparse.Namespace) -> JobSettings:
             accent=args.couleur,
         ),
         avis_dir=None if args.sans_apprentissage else data_dir() / "avis",
+        hook=not args.sans_accroche,
+        shouts=not args.sans_cris,
     )
 
 

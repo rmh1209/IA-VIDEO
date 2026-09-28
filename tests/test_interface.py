@@ -18,7 +18,7 @@ from hoopcut.pipeline import JobSettings, analysis_cache
 from hoopcut.render import RenderSettings
 from hoopcut.select import SelectionSettings
 
-from fake_ai import fake_ai_analysis
+from fake_ai import fake_ai_analysis, fake_transcript
 from synthetic import make_synthetic_video
 
 SCENES = [(3.0 + i % 3, 0.6 if i % 4 == 1 else 0.1) for i in range(12)]
@@ -78,6 +78,7 @@ def studio_page(tmp_path):
     source = fetch(str(video), job.work_root)  # analyse IA déjà en cache : aucun modèle lancé
     analysis = Analysis.from_ai(fake_ai_analysis(SCENES), duration=source.info.duration, model="faux")
     analysis_cache(source.work_dir, job).write_text(analysis.model_dump_json(), encoding="utf-8")
+    (source.work_dir / "transcription.json").write_text(json.dumps(fake_transcript(SCENES)), encoding="utf-8")
 
     server = Server(("127.0.0.1", 0), Studio(job))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -107,6 +108,17 @@ def test_preview_opinions_and_validation(studio_page):
     assert clips and 12 <= preview["duree"] <= 18
     assert preview["titre"] == "La première européenne de Parker"
     assert 0 < preview["cadre"]["haut"] < 50 and preview["cadre"]["largeur"] == 100
+    # L'accroche ouvre le short : un extrait d'un des clips suivants
+    opening = clips[0]
+    assert opening["accroche"] and opening["id"] == "accroche"
+    assert any(not c["accroche"] and c["debut"] <= opening["debut"] < opening["fin"] <= c["fin"] + 1.1 for c in clips)
+    # Cris des commentateurs reconnus dans la transcription
+    shouted = [c for c in clips if c["cri"]]
+    assert shouted and {c["cri"]["texte"] for c in shouted} <= {"WHAT A DUNK !", "MY GOODNESS !", "INCROYABLE !",
+                                                                 "QUEL CONTRE !"}
+    assert all(c["debut"] <= c["cri"]["debut"] < c["cri"]["fin"] <= c["fin"] for c in shouted)
+    status, _, png = page.request(shouted[0]["cri"]["image"])
+    assert status == 200 and png.startswith(b"\x89PNG")
 
     status, headers, png = page.request(clips[0]["habillage"])
     assert status == 200 and png.startswith(b"\x89PNG")
@@ -117,7 +129,7 @@ def test_preview_opinions_and_validation(studio_page):
     assert status == 416
 
     # « Pas bon : action sans intérêt » : le clip disparaît, l'avis est noté avec une image
-    removed = clips[0]["id"]
+    removed = next(c["id"] for c in clips if not c["accroche"])
     answer = page.api("/api/avis", {"id": removed, "raison": "ennuyeux", "texte": "bof"})
     assert "retiré" in answer["message"]
     assert removed not in [c["id"] for c in answer["apercu"]["clips"]]
@@ -126,8 +138,20 @@ def test_preview_opinions_and_validation(studio_page):
     assert entry["moment"]["action"] and entry["clip"]["fin"] > entry["clip"]["debut"]
     assert removed in json.loads((work_dir / EDITS_FILE).read_text(encoding="utf-8"))["retires"]
 
+    # Accroche refusée : une autre action la remplace (ou plus d'accroche s'il n'y en a pas d'autre)
+    assert page.request("/api/avis", {"id": "accroche", "raison": "ennuyeux"})[0] == 400  # raison d'un clip
+    answer = page.api("/api/avis", {"id": "accroche", "raison": "rien"})
+    assert "accroche" in answer["message"].lower() and answer["apercu"]["reprendre"] == 0
+
+    # Cri faux : retiré de ce clip
+    with_shout = next((c for c in answer["apercu"]["clips"] if c["cri"] and not c["accroche"]), None)
+    if with_shout:
+        answer = page.api("/api/avis", {"id": with_shout["id"], "raison": "cri"})
+        assert next(c for c in answer["apercu"]["clips"] if c["id"] == with_shout["id"])["cri"] is None
+        assert read_journal(job.avis_dir / JOURNAL_FILE)[-1]["clip"]["cri"] == with_shout["cri"]["texte"]
+
     # Légende corrigée
-    target = answer["apercu"]["clips"][0]["id"]
+    target = next(c["id"] for c in answer["apercu"]["clips"] if not c["accroche"])
     answer = page.api("/api/avis", {"id": target, "raison": "legende", "action": "dunk", "joueur": "Victor Wembanyama"})
     fixed = next(c for c in answer["apercu"]["clips"] if c["id"] == target)
     assert fixed["legende"] == "DUNK · Victor Wembanyama"
@@ -159,7 +183,8 @@ def test_preview_opinions_and_validation(studio_page):
 
     journal = read_journal(job.avis_dir / JOURNAL_FILE)
     assert journal[-1]["avis"] == "valide" and journal[-1]["clips"]
-    assert learn(job.avis_dir / JOURNAL_FILE).opinions == len(journal[-1]["clips"]) + 3
+    refused = sum(1 for entry in journal if entry["avis"] == "pas_bon")
+    assert learn(job.avis_dir / JOURNAL_FILE).opinions == len(journal[-1]["clips"]) + refused
 
     page.api("/api/nouveau", {})
     state = page.api("/api/etat")

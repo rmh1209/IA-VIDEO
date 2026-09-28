@@ -2,9 +2,11 @@
 
 Tu donnes un lien YouTube (résumé de match ou compilation) et hoopcut produit une **vidéo verticale de 60 à 80 secondes** avec les meilleurs moments :
 
-- la vidéo au centre, sur un fond flouté (elle ne remplit pas tout l'écran) ;
+- une **accroche** : la plus belle action dès la première seconde, puis le récit ;
+- la vidéo au centre, agrandie, sur un fond flouté ;
 - le **titre** en haut ;
 - le **score** et l'**action** en bas (« DUNK · TONY PARKER ») ;
+- les **cris des commentateurs** en gros au bon moment (« QUEL DUNK ! », « ON FIRE ! ») ;
 - de la **musique** sous le son du match ;
 - **aucun ralenti**.
 
@@ -30,6 +32,9 @@ Il prépare aussi un fichier texte avec un titre, une description et des hashtag
    - la note finale tient compte du type d'action, de l'enthousiasme des commentateurs et du bruit du public.
 5. **Sélection** : l'outil calcule la meilleure combinaison de clips pour tenir entre 60 et 80 s, fondus compris. Il évite les doublons et varie les joueurs et les types d'action. Un résumé de match reste dans l'ordre chronologique. Une compilation va du moins fort au plus fort.
 6. **Montage** au format 1080×1920 : habillage, fondus, musique, et volume réglé au niveau des réseaux sociaux.
+   - **Accroche** : le short s'ouvre sur la fin du clip le plus fort (le geste et la réaction, 2 à 4 s), suivie d'un flash blanc. Parmi les trois meilleurs clips, celui où un commentateur crie est préféré : c'est la preuve la plus sûre d'une grosse action.
+   - **Cris des commentateurs** : hoopcut cherche dans les commentaires transcrits des exclamations connues (« quel dunk », « c'est magnifique », « on fire », « throws it down »…) et les affiche en gros, au moment où elles sont dites, sur le haut de l'image (les tribunes) pour ne pas cacher le jeu. Le texte de Whisper n'est jamais affiché tel quel : il écorche trop souvent les noms. Compte deux à trois cris par résumé de match.
+   - **Vidéo agrandie** : les côtés de l'image sont rognés (zoom 1,25). Mesuré sur 72 clips, l'action reste toujours dans le cadre.
 
 ## Installation (une seule fois, Windows)
 
@@ -63,6 +68,9 @@ Pendant qu'il passe, clique sur « Ce clip n'est pas bon ». Il repasse en boucl
 | Démarre trop tard | Garde 2 s de plus avant l'action. |
 | Trop long | Retire 2 s avant l'action. |
 | Mauvaise légende | Tu corriges l'action ou le joueur. Une faute d'orthographe est corrigée partout dans la vidéo. |
+| Le texte en gros est faux | Retire le cri de ce clip. Un cri refusé deux fois n'est plus jamais affiché. |
+
+Sur l'accroche (le premier clip), les choix sont : prendre une autre action, ne pas mettre d'accroche du tout, ou retirer le texte en gros.
 
 Tu peux ajouter un mot d'explication. Les retouches d'une vidéo sont gardées : si tu la rouvres, tu retrouves ton short tel que tu l'as laissé.
 
@@ -130,7 +138,9 @@ Dépose tes musiques **libres de droits** dans le dossier `musique/`. hoopcut en
 | `--duree-min 60 --duree-max 80` | Fourchette de durée. |
 | `--transition fondu / flash / glisse / aucune` | Transition entre les clips. |
 | `--fond flou / noir` | Fond derrière la vidéo. |
-| `--zoom 1.3` | Agrandit la vidéo en rognant les côtés. |
+| `--zoom 1.25` | Agrandit la vidéo en rognant les côtés (défaut 1,25 ; `--zoom 1` garde l'image entière). |
+| `--sans-accroche` | Le short commence directement par la première action. |
+| `--sans-cris` | N'affiche pas les cris des commentateurs. |
 | `--couleur "#FF7A00"` | Couleur d'accent (étiquette, score, légende). |
 | `--sans-score` | N'affiche pas le score. |
 | `--sans-commentaires` | Ne transcrit pas les commentaires : un peu plus rapide, mais les noms de joueurs sont perdus. |
@@ -199,6 +209,8 @@ hoopcut/
   models.py         format des actions (réponse de l'IA et format interne)
   shots.py          changements de plan (filtre scene de FFmpeg)
   select.py         choix des clips (programmation dynamique sur la durée)
+  hook.py           accroche : la plus belle action en ouverture
+  shouts.py         cris des commentateurs reconnus dans la transcription
   overlay.py        habillage PNG (titre, score, légende) avec Pillow
   render.py         montage FFmpeg (vertical, fond flou, fondus, musique, volume -14 LUFS)
   heuristic.py      mode --sans-ia (volume sonore)

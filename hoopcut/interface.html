@@ -74,6 +74,15 @@ pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.5 Consolas, ui
 #lecteur.coupe { opacity: .1; }
 #habillage { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #habillage.attente { visibility: hidden; }
+#cri { position: absolute; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+#cri.claque { animation: claque .18s ease-out; }
+@keyframes claque {
+  0% { transform: translate(-50%, -50%) scale(.55); }
+  55% { transform: translate(-50%, -50%) scale(1.06); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.point.accroche { border-radius: 4px; transform: rotate(45deg) scale(.85); }
+.point.accroche.actif { transform: rotate(45deg) scale(1.1); }
 #final { width: 100%; height: 100%; background: #000; }
 .son { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.75); border-color: var(--accent); }
 .fin { position: absolute; inset: 0; display: grid; place-content: center; gap: 14px; text-align: center; background: rgba(0,0,0,.6); cursor: default; }
@@ -154,6 +163,7 @@ pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.5 Consolas, ui
         <canvas id="fond" width="72" height="128"></canvas>
         <video id="lecteur" playsinline preload="auto"></video>
         <img id="habillage" alt="">
+        <img id="cri" alt="" hidden>
         <button id="son" class="son" hidden>🔊 Activer le son</button>
         <div id="fin" class="fin" hidden>
           <p>C'est tout !</p>
@@ -180,7 +190,7 @@ pre { white-space: pre-wrap; word-break: break-word; font: 13px/1.5 Consolas, ui
           <p class="doux petit" id="duree"></p>
         </div>
         <form id="avis" class="avis" hidden>
-          <p class="avis-titre">Qu'est-ce qui ne va pas dans ce clip ?</p>
+          <p class="avis-titre" id="avis-titre">Qu'est-ce qui ne va pas dans ce clip ?</p>
           <p class="doux petit avis-note">Il repasse en boucle pendant que tu choisis. Ton avis sert aux prochains shorts.</p>
           <div class="raisons" id="raisons"></div>
           <div id="corriger" class="corriger" hidden>
@@ -423,13 +433,16 @@ function chargerApercu(nouveau) {
   $('points').replaceChildren(...clips.map((clip, i) => {
     const point = document.createElement('button');
     point.type = 'button';
-    point.className = 'point';
-    point.title = `Clip ${i + 1} : ${clip.legende}`;
+    point.className = clip.accroche ? 'point accroche' : 'point';
+    point.title = `${nomDuClip(i)} : ${clip.legende}`;
     point.setAttribute('aria-label', point.title);
     point.addEventListener('click', () => { fermerAvis(); jouer(i); });
     return point;
   }));
-  for (const clip of clips) new Image().src = clip.habillage;  // prépare les habillages
+  for (const clip of clips) {  // prépare les images
+    new Image().src = clip.habillage;
+    if (clip.cri) new Image().src = clip.cri.image;
+  }
   fermerAvis();
   $('valider').classList.remove('pulse');
   jouer(Math.min(nouveau.reprendre || 0, clips.length - 1));
@@ -483,9 +496,15 @@ function basculer() {
   if (lecteur.paused) { enchainer = true; lancer(); } else { lecteur.pause(); }
 }
 
+function nomDuClip(i) {
+  if (clips[i].accroche) return 'Accroche';
+  const avant = clips.slice(0, i).filter((c) => c.accroche).length;
+  return `Clip ${i + 1 - avant} sur ${clips.filter((c) => !c.accroche).length}`;
+}
+
 function majInfos() {
   const clip = clips[index];
-  $('compteur').textContent = `Clip ${index + 1} sur ${clips.length}`;
+  $('compteur').textContent = clip.accroche ? 'Accroche : la plus belle action, dès la 1re seconde' : nomDuClip(index);
   $('legende').textContent = clip.legende || '';
   document.querySelectorAll('#points .point').forEach((point, i) => {
     point.classList.toggle('actif', i === index);
@@ -527,6 +546,7 @@ function boucle() {
   if (etape !== 'apercu' || !clips.length) return;
   const clip = clips[index];
   if (enchainer && !lecteur.paused && !lecteur.seeking && (lecteur.currentTime >= clip.fin - 0.03 || lecteur.ended)) suivant();
+  montrerCri(clips[index]);
   if (!fond.hidden && lecteur.readyState >= 2 && lecteur.videoWidth) {
     const largeurVideo = lecteur.videoWidth, hauteurVideo = lecteur.videoHeight;
     const largeur = Math.min(largeurVideo, hauteurVideo * fond.width / fond.height);
@@ -538,6 +558,26 @@ function boucle() {
 }
 requestAnimationFrame(boucle);
 
+// Cri des commentateurs : il « claque » à l'écran au moment où il est dit, comme dans le short
+let criAffiche = null;
+function montrerCri(clip) {
+  const cri = clip && clip.cri;
+  const t = lecteur.currentTime;
+  const visible = Boolean(cri) && !lecteur.seeking && t >= cri.debut && t <= cri.fin;
+  const cle = visible ? `${index}:${cri.image}` : null;
+  if (cle === criAffiche) return;
+  criAffiche = cle;
+  const image = $('cri');
+  image.classList.remove('claque');
+  if (!visible) { image.hidden = true; return; }
+  image.src = cri.image;
+  image.style.top = cri.centre + '%';
+  image.style.width = cri.largeur + '%';
+  image.hidden = false;
+  void image.offsetWidth;  // relance l'animation
+  image.classList.add('claque');
+}
+
 document.addEventListener('keydown', (e) => {
   if (etape !== 'apercu' || e.target.closest('input, textarea, select, button')) return;
   if (e.key === ' ') { e.preventDefault(); basculer(); }
@@ -547,20 +587,27 @@ document.addEventListener('keydown', (e) => {
 
 // --- avis sur un clip --------------------------------------------------------------------------
 
-$('raisons').replaceChildren(...CONFIG.raisons.map(([code, libelle]) => {
-  const bouton = document.createElement('button');
-  bouton.type = 'button';
-  bouton.className = 'raison';
-  bouton.dataset.code = code;
-  bouton.textContent = libelle;
-  bouton.addEventListener('click', () => choisirRaison(code));
-  return bouton;
-}));
 $('action').replaceChildren(...CONFIG.actions.map(([code, libelle]) => new Option(libelle, code)));
+
+function raisonsDuClip(clip) {
+  const liste = clip.accroche ? CONFIG.raisons_accroche : CONFIG.raisons;
+  return liste.filter(([code]) => code !== 'cri' || clip.cri).map(([code, libelle]) => {
+    const bouton = document.createElement('button');
+    bouton.type = 'button';
+    bouton.className = 'raison';
+    bouton.dataset.code = code;
+    bouton.textContent = code === 'cri' ? `Le texte « ${clip.cri.texte} » est faux` : libelle;
+    bouton.addEventListener('click', () => choisirRaison(code));
+    return bouton;
+  });
+}
 
 function ouvrirAvis() {
   const clip = clips[index];
   if (!clip) return;
+  $('raisons').replaceChildren(...raisonsDuClip(clip));
+  $('avis-titre').textContent = clip.accroche ? "Qu'est-ce qui ne va pas dans l'accroche ?"
+    : "Qu'est-ce qui ne va pas dans ce clip ?";
   $('actions').hidden = true;
   $('avis').hidden = false;
   $('texte').value = '';

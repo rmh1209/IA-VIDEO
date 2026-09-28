@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from .models import Analysis, Moment
 from .text_utils import fold, matches_any, same_name
+
+if TYPE_CHECKING:
+    from .shouts import Shout
 
 FRAME = 0.04  # environ une image de marge autour d'un changement de plan
 MAX_ITEMS = 200
@@ -51,6 +54,8 @@ class Clip:
     moment: Moment
     value: float = 0.0
     focus: bool = True
+    teaser: bool = False  # accroche : extrait du clip le plus fort, placé en ouverture (voir hook.py)
+    shout: Shout | None = None  # cri des commentateurs affiché en gros (voir shouts.py)
 
     @property
     def duration(self) -> float:

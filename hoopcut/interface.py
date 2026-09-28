@@ -26,6 +26,7 @@ import webbrowser
 from collections import deque
 from dataclasses import replace
 from datetime import datetime
+from functools import lru_cache
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -36,12 +37,12 @@ from PIL import Image
 
 from .analyze import AnalysisError
 from .cli import DEFAULT_MUSIC_DIR, build_parser, job_from_args, load_dotenv
-from .feedback import (EDITS_FILE, JOURNAL_FILE, REASONS, REMOVING, Edits, Learned, learn, moment_id, record,
-                       snapshot)
+from .feedback import (EDITS_FILE, JOURNAL_FILE, REASONS, REMOVING, TEASER_REASONS, Edits, Learned, learn,
+                       moment_id, record, snapshot)
 from .fetch import DownloadError
 from .ffmpeg_utils import FFmpegError, run
 from .models import ACTIONS, Analysis
-from .overlay import FONT_PATH, overlay_image
+from .overlay import FONT_PATH, overlay_image, shout_center, shout_image
 from .pipeline import (JobSettings, Prepared, analysis_cache, build_overlays, caption_for, choose, prepare,
                        render_short, title_for)
 from .render import compute_layout, pick_music
@@ -94,6 +95,9 @@ class Studio:
         self.video_title = ""
         self.runs = 0  # numéro de la vidéo en cours (adresse de la vidéo dans la page)
         self.version = 0  # numéro du plan de montage (adresse des habillages)
+        # Les numéros repartent de zéro à chaque lancement : ce préfixe évite au navigateur de ressortir
+        # les images d'une séance précédente, gardées dans son cache.
+        self.session = secrets.token_hex(4)
         self.resume = 0  # clip à rejouer après un avis
         self.current = job  # réglages du short en cours (musique tirée au sort)
         self.learned = Learned()
@@ -132,19 +136,19 @@ class Studio:
 
     def feedback(self, clip_id: str, reason: str, text: str = "", action: str | None = None,
                  player: str | None = None) -> dict:
-        if reason not in REASONS:
-            raise UserError("Raison inconnue.")
         with self.lock:
             if self.step != "apercu" or self.plan is None or self.prepared is None:
                 raise UserError("Aucun aperçu en cours.")
-            position = next((i for i, c in enumerate(self.plan.clips) if moment_id(c.moment) == clip_id), None)
+            position = next((i for i, c in enumerate(self.plan.clips) if _clip_id(c) == clip_id), None)
             if position is None:
                 raise UserError("Ce clip n'est plus dans le short : recharge la page.")
             clip = self.plan.clips[position]
+            if reason not in (TEASER_REASONS if clip.teaser else REASONS):
+                raise UserError("Raison inconnue.")
             work_dir = self.prepared.source.work_dir
             saved = (work_dir / EDITS_FILE).read_bytes() if (work_dir / EDITS_FILE).exists() else None
             edits = Edits.load(work_dir)
-            edits.add(clip.moment, reason, action, player)
+            edits.add(clip.moment, reason, action, player, teaser=clip.teaser)
             edits.save(work_dir)
             try:
                 analysis, plan = choose(self.prepared, self.current, self._log, self.learned)
@@ -182,11 +186,13 @@ class Studio:
             if self.step != "apercu" or self.plan is None:
                 raise UserError("Aucun aperçu à valider.")
             if self.journal:
+                opening = next((c for c in self.plan.clips if c.teaser), None)
                 record(self.journal, {
                     "avis": "valide",
                     "video": self._video_info(),
                     "reglages": {"avant": self.learned.before, "apres": self.learned.after},
-                    "clips": [_clip_info(c) for c in self.plan.clips],
+                    "clips": [_clip_info(c) for c in self.plan.clips if not c.teaser],
+                    "accroche": _clip_info(opening) if opening else None,
                 })
             self.step, self.progress, self.detail, self.error = "montage", 0.0, "Préparation du montage…", ""
             self.lines.clear()
@@ -255,13 +261,19 @@ class Studio:
         content = build_overlays(plan, analysis, title_for(prepared.source, analysis, job), job)[index]
         image = overlay_image(content, video_top=layout.top, video_bottom=layout.bottom, accent=render.accent,
                               size=(render.width, render.height)).resize(PREVIEW_SIZE, Image.LANCZOS)
-        buffer = io.BytesIO()
-        image.save(buffer, "PNG")
-        data = buffer.getvalue()
+        data = _png(image)
         with self.lock:
             if version == self.version:
                 self.overlays[(version, index)] = data
         return data
+
+    def shout_png(self, version: int, index: int) -> bytes | None:
+        """Cri affiché en gros sur un clip, à la taille réelle du short (la page le réduit)."""
+        with self.lock:
+            if version != self.version or self.plan is None or not 0 <= index < len(self.plan.clips):
+                return None
+            shout = self.plan.clips[index].shout
+        return _png(shout_image(shout.text)) if shout else None
 
     def media(self, name: str, copy: bool = False) -> tuple[Path | None, str]:
         with self.lock:
@@ -367,10 +379,12 @@ class Studio:
         record(self.journal, {
             "avis": "pas_bon",
             "raison": reason,
-            "raison_texte": REASONS[reason],
+            "raison_texte": (TEASER_REASONS if clip.teaser else REASONS)[reason],
             "texte": (text or "").strip(),
+            "accroche": clip.teaser,
             "video": self._video_info(),
-            "clip": {"debut": clip.start, "fin": clip.end, "geste": m.key, "legende": caption_for(m, self.analysis)},
+            "clip": {"debut": clip.start, "fin": clip.end, "geste": m.key, "legende": caption_for(m, self.analysis),
+                     "cri": clip.shout.text if clip.shout else None},
             "moment": m.model_dump(),
             "correction": {"action": action, "joueur": (player or "").strip() or None} if reason == "legende" else None,
             "reglages": {"avant": self.learned.before, "apres": self.learned.after},
@@ -384,23 +398,34 @@ class Studio:
         prepared, analysis, plan, job = self.prepared, self.analysis, self.plan, self.current
         render = job.render
         layout = compute_layout(prepared.source.info, render)
+        shout_y = 100 * shout_center(layout.top, layout.video_height) / render.height
         clips = []
         for index, clip in enumerate(plan.clips):
             m = clip.moment
+            shout = clip.shout
             clips.append({
-                "id": moment_id(m),
+                "id": _clip_id(clip),
+                "accroche": clip.teaser,
                 "debut": clip.start,
                 "fin": clip.end,
                 "geste": m.key,
                 "legende": caption_for(m, analysis) or "",
                 "action": m.action,
                 "joueur": m.player or "",
-                "habillage": f"/media/habillage/{self.version}/{index}.png",
+                "habillage": f"/media/habillage/{self.session}/{self.version}/{index}.png",
+                "cri": {
+                    "texte": shout.text,
+                    "image": f"/media/cri/{self.session}/{self.version}/{index}.png",
+                    "debut": shout.start,
+                    "fin": shout.end,
+                    "centre": shout_y,
+                    "largeur": 100 * _shout_width(shout.text) / render.width,
+                } if shout else None,
             })
         return {
             "version": self.version,
             "reprendre": self.resume,
-            "video": f"/media/video?n={self.runs}",
+            "video": f"/media/video?n={self.session}-{self.runs}",
             "cadre": {
                 "gauche": 50 * (render.width - layout.video_width) / render.width,
                 "haut": 100 * layout.top / render.height,
@@ -412,7 +437,7 @@ class Studio:
             "source": prepared.source.title,
             "duree": round(plan.total, 1),
             "clips": clips,
-            "musique": f"/media/musique?n={self.runs}" if render.music else None,
+            "musique": f"/media/musique?n={self.session}-{self.runs}" if render.music else None,
             "volume_musique": render.music_volume,
             "volume_original": render.original_volume,
             "avertissements": plan.warnings,
@@ -423,7 +448,7 @@ class Studio:
             publication = self.output.with_suffix(".txt").read_text(encoding="utf-8")
         except OSError:
             publication = ""
-        return {"video": f"/media/sortie?n={self.runs}-{self.version}", "nom": self.output.name,
+        return {"video": f"/media/sortie?n={self.session}-{self.runs}-{self.version}", "nom": self.output.name,
                 "publication": publication}
 
 
@@ -455,17 +480,27 @@ def _explain(before: EditPlan, after: EditPlan, position: int, clip: Clip, reaso
              analysis: Analysis) -> tuple[str, int]:
     """Ce qui a changé après un avis, et le clip à rejouer."""
     target = moment_id(clip.moment)
-    old_ids = {moment_id(c.moment) for c in before.clips}
-    new_ids = [moment_id(c.moment) for c in after.clips]
-    added = [i for i, key in enumerate(new_ids) if key not in old_ids]
+    old_ids = {moment_id(c.moment) for c in before.clips if not c.teaser}
+    new_ids = [None if c.teaser else moment_id(c.moment) for c in after.clips]
+    added = [i for i, key in enumerate(new_ids) if key and key not in old_ids]
     dropped = len([key for key in old_ids if key != target and key not in new_ids])
     here = new_ids.index(target) if target in new_ids else None
+    opening = next((i for i, c in enumerate(after.clips) if c.teaser), None)
 
     def label(index: int) -> str:
         m = after.clips[index].moment
         return caption_for(m, analysis) or m.label
 
-    if reason in REMOVING:
+    if reason == "cri":
+        message = "Texte retiré. Merci !"
+        resume = 0 if clip.teaser else (here if here is not None else min(position, len(after.clips) - 1))
+    elif clip.teaser:
+        if opening is None:
+            message = "Plus d'accroche : le short commence directement par la première action."
+        else:
+            message = f"Nouvelle accroche : {label(opening)}."
+        resume = 0
+    elif reason in REMOVING:
         message = "Clip retiré, merci !"
         if added:
             message += " À la place : " + ", ".join(label(i) for i in added) + "."
@@ -494,7 +529,24 @@ def _clip_info(clip: Clip) -> dict:
     m = clip.moment
     return {"id": moment_id(m), "action": m.action, "joueur": m.player, "spectacular": m.spectacular,
             "debut": clip.start, "fin": clip.end, "geste": m.key,
-            "en_plus_avant": m.extra_before, "en_plus_apres": m.extra_after}
+            "en_plus_avant": m.extra_before, "en_plus_apres": m.extra_after,
+            "cri": clip.shout.text if clip.shout else None}
+
+
+def _clip_id(clip: Clip) -> str:
+    """Identifiant d'un clip dans la page : l'accroche reprend l'action d'un autre clip, elle a le sien."""
+    return "accroche" if clip.teaser else moment_id(clip.moment)
+
+
+def _png(image: Image.Image) -> bytes:
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+@lru_cache(maxsize=64)
+def _shout_width(text: str) -> int:
+    return shout_image(text).width
 
 
 def _restore(path: Path, saved: bytes | None) -> None:
@@ -578,11 +630,12 @@ class Handler(BaseHTTPRequestHandler):
         if media:
             copy = parse_qs(url.query).get("copie") == ["1"]
             return self._file(*self.studio.media(media[1], copy))
-        overlay = re.fullmatch(r"/media/habillage/(\d+)/(\d+)\.png", path)
-        if overlay:
-            data = self.studio.overlay_png(int(overlay[1]), int(overlay[2]))
+        picture = re.fullmatch(r"/media/(habillage|cri)/(\w+)/(\d+)/(\d+)\.png", path)
+        if picture:
+            draw = self.studio.overlay_png if picture[1] == "habillage" else self.studio.shout_png
+            data = draw(int(picture[3]), int(picture[4])) if picture[2] == self.studio.session else None
             if data is None:
-                return self._error(404, "Habillage périmé.")
+                return self._error(404, "Image périmée.")
             return self._send(data, "image/png", cache=True)
         self._error(404, "Page introuvable.")
 
@@ -645,7 +698,8 @@ class Handler(BaseHTTPRequestHandler):
     # --- réponses ----------------------------------------------------------------------------------
 
     def _page(self) -> None:
-        config = {"raisons": list(REASONS.items()), "actions": list(ACTIONS.items())}
+        config = {"raisons": list(REASONS.items()), "raisons_accroche": list(TEASER_REASONS.items()),
+                  "actions": list(ACTIONS.items())}
         data = PAGE.read_text(encoding="utf-8").replace(
             "{{CONFIG}}", json.dumps(config, ensure_ascii=False).replace("</", "<\\/")
         ).encode("utf-8")
