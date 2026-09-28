@@ -159,7 +159,7 @@ def _caption(m, analysis: Analysis) -> str | None:
         return None
     if m.player:
         return f"{m.label} · {m.player}"
-    if m.team and analysis.video_type == "match":
+    if m.team and m.team_sure and analysis.video_type == "match":
         return f"{m.label} · {m.team}"
     return m.label
 

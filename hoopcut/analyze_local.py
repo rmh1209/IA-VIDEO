@@ -37,6 +37,7 @@ from .prompts import (
     LOCAL_NAMES_PROMPT,
     LOCAL_OVERVIEW_PROMPT,
     LOCAL_SCORE_PROMPT,
+    LOCAL_SHOT_PROMPT,
     LOCAL_SUMMARY_PROMPT,
     LOCAL_VIEW_PROMPT,
     LOCAL_WINDOW_PROMPT,
@@ -155,7 +156,7 @@ def analyze_local(
             # dans le short, et chaque image coûte 1 à 2 s à la carte graphique.
             pool = sorted((m for m in moments if not m.replay), key=lambda m: m.spectacular, reverse=True)
             candidates = _check_views(server, video, pool, TOP_CHECKED, media, log)
-            _trim_to_live_shots(server, video, info, candidates, cuts, media, log)
+            _trim_to_live_play(server, video, info, candidates, cuts, media, log)
             baskets: dict[str, tuple[str | None, int]] = {}
             if settings.scores and overview.is_match and overview.scoreboard in SCOREBOARD_CROPS:
                 baskets, duplicates = _read_scores(server, video, info, candidates, overview, cuts, media, log)
@@ -493,7 +494,14 @@ def _rate(moments: list[Moment], raw: dict[int, int], curve: list[tuple[float, f
             m.action = settle_action(m.action, segments, m.key, points)
         if team:
             m.team = team  # le tableau sait mieux que le modèle quelle équipe a marqué
-        value = 0.6 * raw.get(id(m), m.spectacular) + 0.4 * TYPE_PRIOR.get(m.action, 3)
+        # Équipe affichée sous le clip seulement si le tableau de score l'a confirmée : le modèle se trompe
+        # souvent (sur un contre, il donne l'équipe du tireur). Sa supposition sert quand même au focus.
+        m.team_sure = bool(team)
+        # La note du modèle varie beaucoup d'une fenêtre à l'autre : le type d'action pèse davantage
+        # (un dunk, un alley-oop ou un contre font plus d'effet qu'un panier ordinaire).
+        value = 0.45 * raw.get(id(m), m.spectacular) + 0.55 * TYPE_PRIOR.get(m.action, 3)
+        if commentary_type(segments, m.key) in ("dunk", "alley_oop", "block") and not m.replay:
+            value += 1.0  # geste spectaculaire annoncé par les commentateurs eux-mêmes
         if loud is not None:
             reaction = [level for t, level in curve if m.key <= t <= m.key + 3.0]
             if reaction and max(reaction) >= loud:
@@ -588,65 +596,74 @@ def score_times(key: float, cuts: list[float], duration: float) -> tuple[float, 
     return round(t_before, 2), round(min(t_after, duration - 0.1), 2)
 
 
-def _views(server: LlamaServer, video: Path, frames: dict[str, float], media: Path) -> dict[str, str]:
+def _views(server: LlamaServer, video: Path, frames: dict[str, float], media: Path,
+           prompt: str = LOCAL_VIEW_PROMPT, width: int = 448) -> dict[str, str]:
     """Prise de vue (large, gros_plan, ralenti, autre) des images demandées {nom: instant}, gardée en cache."""
-    tag = hashlib.sha1(LOCAL_VIEW_PROMPT.encode()).hexdigest()[:8]
+    tag = hashlib.sha1((prompt if width == 448 else f"{prompt}|{width}").encode()).hexdigest()[:8]
     cache = media / f"vues_{tag}.json"
     known = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
     todo = [(name, t) for name, t in frames.items() if name not in known]
     for start in range(0, len(todo), 6):
         batch = todo[start:start + 6]
-        images = [_image_part(_frame(video, t, media / f"vue_{i}.jpg", width=448)) for i, (_, t) in enumerate(batch)]
+        images = [_image_part(_frame(video, t, media / f"vue_{i}.jpg", width=width)) for i, (_, t) in enumerate(batch)]
         schema = {"type": "object", "properties": {"views": {
             "type": "array", "minItems": len(batch), "maxItems": len(batch),
             "items": {"enum": ["large", "gros_plan", "ralenti", "autre"]}}}, "required": ["views"]}
-        data = server.ask([*images, {"type": "text", "text": LOCAL_VIEW_PROMPT}], schema, max_tokens=120)
+        data = server.ask([*images, {"type": "text", "text": prompt}], schema, max_tokens=120)
         for (name, _), view in zip(batch, data.get("views", [])):
             known[name] = view
         cache.write_text(json.dumps(known), encoding="utf-8")
     return known
 
 
-def _trim_to_live_shots(server: LlamaServer, video: Path, info: MediaInfo, moments: list[Moment],
-                        cuts: list[float], media: Path, log: Log) -> None:
-    """Les chaînes coupent souvent sur le public, le banc ou un ralenti juste avant ou après l'action.
-    On regarde une image de chacun des plans qui entourent le geste décisif, et le clip ne pourra
-    s'étendre que sur les plans de jeu en vue large qui touchent celui du geste."""
-    bounds = [0.0, *sorted(c for c in cuts if 0.0 < c < info.duration), info.duration]
-    shots = list(zip(bounds, bounds[1:]))
-    around: dict[int, list[int]] = {}
-    frames: dict[str, float] = {}
-    for m in moments:
-        index = next((i for i, (a, b) in enumerate(shots) if a <= m.key < b), None)
-        if index is None:
-            continue
-        near = [j for j in range(index - 2, index + 3)
-                if j != index and 0 <= j < len(shots) and shots[j][1] > m.key - 7.0 and shots[j][0] < m.key + 6.0]
-        around[id(m)] = [index, *near]
-        for j in near:
-            a, b = shots[j]
-            frames[f"plan_{a:.2f}_{b:.2f}"] = (a + b) / 2
+TRIM_OFFSETS = (-4.5, -3.0, -1.5, 0.0, 1.5, 3.0)  # images regardées autour du geste (s), 0 = le geste
+
+
+def _trim_to_live_play(server: LlamaServer, video: Path, info: MediaInfo, moments: list[Moment],
+                       cuts: list[float], media: Path, log: Log) -> None:
+    """Les chaînes passent souvent au public, au banc ou à un ralenti juste avant ou après l'action, par une
+    coupe franche ou par un fondu que le repérage des plans ne voit pas. On regarde donc une image toutes les
+    1,5 s autour du geste décisif, et le clip ne s'étend que sur le jeu filmé en vue large qui l'entoure.
+    Si le geste tombe sur un plan du public juste après du jeu, c'est que le panier a eu lieu avant : l'instant
+    clé est ramené sur le jeu. S'il n'y a pas de jeu autour, l'action est écartée."""
+    def samples(m: Moment) -> list[float]:
+        return [round(min(max(m.key + offset, 0.0), info.duration - 0.1), 1) for offset in TRIM_OFFSETS]
+
+    frames = {f"t_{t:.1f}": t for m in moments for t in samples(m)}
     if not frames:
         return
-    log(f"      Vérification des plans autour des actions ({len(frames)} plans)…")
-    known = _views(server, video, frames, media)
-
-    def wide(j: int) -> bool:
-        a, b = shots[j]
-        return known.get(f"plan_{a:.2f}_{b:.2f}", "large") == "large"
-
+    log(f"      Vérification du jeu autour des meilleures actions ({len(frames)} images)…")
+    known = _views(server, video, frames, media, prompt=LOCAL_SHOT_PROMPT, width=320)
     for m in moments:
-        if id(m) not in around:
-            continue
-        index = around[id(m)][0]
-        first = last = index
-        while first - 1 in around[id(m)] and wide(first - 1):
+        times = samples(m)
+        wide = [known.get(f"t_{t:.1f}", "large") == "large" for t in times]
+        k = TRIM_OFFSETS.index(0.0)
+        if not wide[k]:
+            before = [i for i in range(k) if wide[i]]
+            if not before or k - before[-1] > 2:
+                m.replay = True  # pas de jeu en vue large autour du geste : rien à montrer
+                continue
+            k = before[-1]
+            m.key = times[k]
+        first = last = k
+        while first > 0 and wide[first - 1]:
             first -= 1
-        while last + 1 in around[id(m)] and wide(last + 1):
+        while last < len(times) - 1 and wide[last + 1]:
             last += 1
-        m.start = round(max(m.start, shots[first][0] + 0.04), 2)
-        m.end = round(min(m.end, shots[last][1] - 0.04), 2)
-        m.start, m.end = min(m.start, m.key), max(m.end, m.key)
+        if first > 0:
+            m.start = max(m.start, _transition(times[first - 1], times[first], cuts, entering=True))
+        if last < len(times) - 1:
+            m.end = min(m.end, _transition(times[last], times[last + 1], cuts, entering=False))
+        m.start, m.end = round(min(m.start, m.key), 2), round(max(m.end, m.key), 2)
+
+
+def _transition(a: float, b: float, cuts: list[float], entering: bool) -> float:
+    """Frontière entre une image hors jeu (a ou b) et une image de jeu : le changement de plan repéré entre
+    les deux s'il y en a un, sinon le milieu (fondu enchaîné)."""
+    inside = [c for c in cuts if a < c < b]
+    if inside:
+        return inside[-1] + 0.04 if entering else inside[0] - 0.04
+    return (a + b) / 2
 
 
 def _check_views(server: LlamaServer, video: Path, pool: list[Moment], wanted: int, media: Path,
@@ -896,6 +913,15 @@ def _fix_spelling(server: LlamaServer, moments: list[Moment], title: str, overvi
         for name in heard:  # nom sans réponse : pas sûr, retiré
             reply = replies.get(name, {})
             verdicts[name] = trusted_name(name, str(reply.get("name", "")), bool(reply.get("known")))
+    # Un même joueur sous deux formes (« Vezenkov », « Tasha Vezenkov ») : la plus courte, donc la plus prudente
+    variants: dict[str, list[str]] = {}
+    for name in {v for v in verdicts.values() if v}:
+        variants.setdefault(fold(name).split()[-1], []).append(name)
+    for names in variants.values():
+        shortest = min(names, key=lambda n: (len(n.split()), len(n)))
+        for heard_name, verdict in verdicts.items():
+            if verdict in names:
+                verdicts[heard_name] = shortest
     for m in moments:
         if m.player in verdicts:
             m.player = verdicts[m.player]
@@ -919,9 +945,12 @@ def trusted_name(heard: str, proposed: str, known: bool) -> str | None:
         return None
     if fold(proposed) == fold(heard):
         return heard  # joueur reconnu, déjà bien écrit
-    if plausible_fix(heard, proposed):
-        return proposed.strip()  # joueur reconnu, orthographe corrigée
-    return None
+    if not plausible_fix(heard, proposed):
+        return None
+    old, new = heard.split(), proposed.split()
+    if len(old) >= 2 and len(new) >= 2 and fold(old[0]) == fold(new[0]) and fold(old[-1]) != fold(new[-1]):
+        return new[-1]  # seul le nom de famille est corrigé : le prénom n'est que ce qui a été entendu
+    return proposed.strip()  # joueur reconnu, orthographe corrigée
 
 
 def plausible_fix(heard: str, fixed: str) -> bool:

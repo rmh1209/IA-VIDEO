@@ -90,6 +90,7 @@ class Moment(BaseModel):
     action: str = "other"
     description: str = ""
     team: Optional[str] = None
+    team_sure: bool = True  # False : équipe devinée (sert au focus), pas assez sûre pour la légende
     player: Optional[str] = None
     spectacular: int = 5
     importance: int = 5

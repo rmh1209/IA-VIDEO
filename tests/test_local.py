@@ -117,21 +117,29 @@ def test_shown_score_ignores_impossible_jumps():
     assert shown_score(None, None) == (None, None)
 
 
-def test_clips_stay_on_the_wide_live_shots_around_the_action(monkeypatch):
-    # Plans : [100-104] public, [104-110] jeu (geste à 108), [110-112] jeu, autre caméra, [112-118] banc
-    cuts = [100.0, 104.0, 110.0, 112.0, 118.0]
-    views = {100.0: "autre", 104.0: "large", 110.0: "large", 112.0: "gros_plan"}
+def test_clips_stay_on_the_wide_live_play_around_the_action(monkeypatch):
+    views = {
+        # 1) public jusqu'à la coupe de 104, jeu, puis gros plan après la coupe de 110,2
+        103.5: "autre", 105.0: "large", 106.5: "large", 108.0: "large", 109.5: "large", 111.0: "gros_plan",
+        # 2) le « geste » tombe sur le public, juste après du jeu, sans coupe repérée (fondu)
+        195.5: "large", 197.0: "large", 198.5: "large", 200.0: "autre", 201.5: "autre", 203.0: "autre",
+        # 3) aucun jeu autour : action écartée
+        295.5: "autre", 297.0: "autre", 298.5: "gros_plan", 300.0: "gros_plan", 301.5: "autre", 303.0: "autre",
+    }
 
-    def fake_views(server, video, frames, media):
-        return {name: views[float(name.split("_")[1])] for name in frames}
+    def fake_views(server, video, frames, media, prompt=None, width=448):
+        return {name: views[float(name[2:])] for name in frames}
 
     monkeypatch.setattr(analyze_local, "_views", fake_views)
-    moment = Moment(start=103.0, key=108.0, end=111.5 + 3.0)
+    first = Moment(start=103.0, key=108.0, end=111.5)
+    second = Moment(start=195.0, key=200.0, end=203.5)
+    third = Moment(start=295.0, key=300.0, end=303.5)
     info = probe_stub()
-    info.duration = 200.0
-    analyze_local._trim_to_live_shots(None, None, info, [moment], cuts, None, lambda _: None)
-    assert moment.start == 104.04  # pas l'image du public avant l'action
-    assert moment.end == 111.96  # l'autre plan de jeu est gardé, pas le banc
+    info.duration = 400.0
+    analyze_local._trim_to_live_play(None, None, info, [first, second, third], [104.0, 110.2], None, lambda _: None)
+    assert (first.start, first.key, first.end) == (104.04, 108.0, 110.16)  # ni le public ni le gros plan
+    assert (second.key, second.end) == (198.5, 199.25)  # instant ramené sur le jeu, fin au milieu du fondu
+    assert third.replay and not first.replay and not second.replay
 
 
 def test_impossible_score_readings_are_dropped():
@@ -205,6 +213,7 @@ def test_spelling_fixes_must_sound_like_what_was_heard():
     assert trusted_name("Fabrice le François", "Fabrice le François", False) is None
     assert trusted_name("Harper", "James Harden", True) is None
     assert trusted_name("Tasha Verzenkov", "Tasha Verdenikov", False) is None  # réécrit, mais inconnu
+    assert trusted_name("Tasha Verzenkov", "Tasha Vezenkov", True) == "Vezenkov"  # prénom seulement entendu
     # Nom lu dans une incrustation de la chaîne : fiable, et remis en minuscules
     assert read_on_screen("DYLAN HARPER") and read_on_screen("P. MILLS")
     assert not read_on_screen("Dylan Harper") and not read_on_screen("SA")
@@ -319,11 +328,13 @@ def test_full_local_analysis_and_resume(tmp_path, fake_engines):
     first = analysis.moments[0]
     # À 1 image/s, l'extrait est accéléré ×2 : le temps donné par le modèle (8 s) est remis à l'échelle
     assert first.key == 16.0 and first.player == "Parker"
-    assert (first.start, first.end) == (10.0, 19.5)  # marge autour du geste décisif
+    assert 10.0 <= first.start < first.key and first.end == 19.5  # marge autour du geste décisif
     live = [m for m in analysis.moments if not m.replay]
     assert len(analysis.moments) == 3 and len(live) == 2  # le ralenti est écarté
     assert sorted((m.score_a, m.score_b) for m in live) == [(12, 4), (23, 6)]  # score lu après l'action
     assert "three_pointer" in {m.action for m in live}  # +3 au tableau, même si le modèle a dit « dunk »
+    assert all(m.team_sure for m in live)  # équipe confirmée par le tableau : affichable dans la légende
+    assert not any(m.team_sure for m in analysis.moments if m.replay)
     prompts = [part["text"] for content, _ in FakeServer.calls for part in content if part["type"] == "text"]
     assert any("Parker, à deux mains" in p for p in prompts)  # commentaires transmis au modèle
     assert any("fenêtres" in line for line in logs)

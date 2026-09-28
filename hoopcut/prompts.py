@@ -112,6 +112,17 @@ Chaque image est tirée d'une vidéo de basket. Pour chaque image, dans l'ordre,
 - autre : public, banc, plateau TV, interview ou graphique.
 """
 
+# Même question, plus stricte, pour les plans qui entourent l'action : mesurée sur 36 images étiquetées,
+# elle écarte mieux le public filmé de loin et les images floues (1 erreur au lieu de 3), mais peut prendre
+# une image du geste pour un gros plan : on ne l'utilise donc pas pour juger le geste lui-même.
+LOCAL_SHOT_PROMPT = """\
+Chaque image est tirée d'une vidéo de basket. Pour chaque image, dans l'ordre, dis comment elle est filmée :
+- large : caméra principale, vue large et haute du terrain : on voit le parquet et plusieurs joueurs en entier ;
+- gros_plan : quelques joueurs en grand, ou caméra au ras du terrain ou sous le panier ;
+- ralenti : rediffusion d'une action : image floue ou filée, angle inhabituel ;
+- autre : le public (même filmé de loin), le banc, un entraîneur, un plateau TV, une interview ou un graphique.
+"""
+
 LOCAL_NAMES_PROMPT = """\
 Vidéo de basket : « {title} »{context}.
 Une transcription automatique des commentaires a produit ces noms de joueurs, parfois mal orthographiés :
