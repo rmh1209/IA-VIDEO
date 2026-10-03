@@ -1,0 +1,57 @@
+// Aides en séance : disques par côté, barre réglable, échauffement conseillé, vibration en fin de repos
+const { chromium } = require("/opt/node-tools/node_modules/playwright");
+const fs = require("fs"), path = require("path");
+const DIR = __dirname;
+const MOCK = eval(fs.readFileSync(path.join(DIR, "suivi-run.js"), "utf8").match(/const MOCK = (`[\s\S]*?`);/)[1]);
+const R = {}, errors = [];
+const check = (name, cond, extra) => { R[name] = cond ? "OK" : "FAIL " + JSON.stringify(extra ?? null).slice(0, 600); };
+const code = o => { const b = new TextEncoder().encode(JSON.stringify(o)); let s = ""; b.forEach(x => { s += String.fromCharCode(x); }); return "F1" + Buffer.from(s, "binary").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+(async () => {
+  const browser = await chromium.launch();
+  const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 })).newPage();
+  page.on("pageerror", e => errors.push("pageerror: " + e.message));
+  page.on("console", m => { if (m.type() === "error") errors.push("console: " + m.text()); });
+  await page.route("https://fonts.googleapis.com/**", r => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  await page.route("https://fonts.gstatic.com/**", r => r.abort());
+  await page.addInitScript(MOCK);
+  await page.addInitScript(() => { window.__vib = []; navigator.vibrate = p => { window.__vib.push(p); return true; }; });
+  await page.goto("file://" + path.join(DIR, "suivi-page.html"));
+  await page.waitForSelector("[data-act=start]");
+  const prog = code({ v: 1, p: 1, g: "force", l: "inter", d: 3, t: 5, q: "gym", z: [], k: 1, s: [["Bas", "Lun", [["squat", 3, "4 à 6", "3 min", "1 à 2"], ["legext", 3, "10 à 12", "90 s", "1 à 2"]]], ["Haut", "Mer", [["goblet", 3, "8 à 10", "2 min", "2"]]], ["Haut 2", "Ven", [["dc", 3, "5 à 8", "3 min", "1 à 2"]]]] });
+  await page.evaluate(c => importCode(c), prog);
+  await page.evaluate(() => { const at = Date.now() - 3 * 864e5; putWorkout({ id: "w1", name: "Bas", si: 0, startedAt: at, endedAt: at + 3e6, dur: 3000, ex: [{ id: "squat", n: "Squat barre", target: null, note: "", sets: [{ w: 60, r: 5 }, { w: 60, r: 5 }, { w: 60, r: 5 }] }], prs: [], vol: 900, nsets: 3 }); render(true); });
+  await page.click('[data-act=start][data-si="0"]');
+  await page.waitForSelector("#ex-0 .plates");
+  const s0 = await page.evaluate(() => ({ pl: document.querySelector("#pl-0").textContent, warm: [...document.querySelectorAll("#warm-0 li")].map(li => li.textContent), legPl: !!document.querySelector("#pl-1"), legWarm: !!document.querySelector("#warm-1") }));
+  check("disques_par_cote", s0.pl.includes("60 kg · par côté : 20") && s0.pl.includes("barre de 20 kg"), s0);
+  check("echauffement", JSON.stringify(s0.warm.map(t => t.split(" kg")[0])) === JSON.stringify(["20", "25", "35", "47,5"]) && s0.warm[0].includes("barre seule"), s0.warm);
+  check("pas_d_aide_hors_barre", !s0.legPl && !s0.legWarm, s0);
+  await page.click("#warm-0 summary");
+  await page.fill('#ex-0 .srow[data-j="0"] [data-f=w]', "100");
+  const s1 = await page.evaluate(() => ({ pl: document.querySelector("#pl-0").textContent, warm: [...document.querySelectorAll("#warm-0 li")].map(li => li.textContent.split(" kg")[0]), open: document.querySelector("#warm-0").open }));
+  check("charge_modifiee", s1.pl.includes("100 kg · par côté : 25 + 15") && JSON.stringify(s1.warm) === JSON.stringify(["20", "40", "60", "80"]) && s1.open, s1);
+  await page.click('#pl-0 [data-act="bar"]');
+  const s2 = await page.evaluate(() => ({ pl: document.querySelector("#pl-0").textContent, bar: profile.bar }));
+  check("barre_15kg", s2.bar === 15 && s2.pl.includes("par côté : 25 + 15 + 2,5") && s2.pl.includes("barre de 15 kg"), s2);
+  await page.click('#pl-0 [data-act="bar"]'); await page.click('#pl-0 [data-act="bar"]');
+  await page.screenshot({ path: path.join(DIR, "aides-seance.png") });
+  // série validée : minuteur, puis vibration à la fin du repos
+  await page.fill('#ex-0 .srow[data-j="0"] [data-f=r]', "5");
+  await page.click('#ex-0 .srow[data-j="0"] .chk');
+  const after = await page.evaluate(() => { rest.end = Date.now() - 200; tickRest(); return { vib: window.__vib, over: rest && rest.over, pl: document.querySelector("#pl-0").textContent }; });
+  check("vibration_fin_repos", after.vib.length === 1 && after.over, after);
+  check("disques_serie_suivante", after.pl.includes("60 kg"), after.pl);
+  // séance sans barre : échauffement en pourcentages, sans disques
+  await page.click("[data-act=discard]");
+  await page.click("[data-act=confirm-ok]");
+  await page.evaluate(() => { const at = Date.now() - 2 * 864e5; putWorkout({ id: "w2", name: "Haut", si: 1, startedAt: at, endedAt: at + 3e6, dur: 3000, ex: [{ id: "goblet", n: "Goblet squat", target: null, note: "", sets: [{ w: 24, r: 10 }] }], prs: [], vol: 240, nsets: 1 }); render(true); });
+  await page.click('[data-act=start][data-si="1"]');
+  await page.waitForSelector("#ex-0");
+  const g = await page.evaluate(() => ({ pl: !!document.querySelector("#pl-0"), warm: [...document.querySelectorAll("#warm-0 li")].map(li => li.textContent) }));
+  check("echauffement_haltere", !g.pl && JSON.stringify(g.warm) === JSON.stringify(["12 kg × 8", "18 kg × 4"]), g);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  check("pas_de_debordement", !over);
+  await browser.close();
+  R.errors = errors;
+  console.log(JSON.stringify(R, null, 1));
+})();

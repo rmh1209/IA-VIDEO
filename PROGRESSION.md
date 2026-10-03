@@ -36,9 +36,9 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Hevy, Strong, Fitbod, JEFIT, Freeletics, MacroFactor… → `docs/analyse-concurrence.md`
 
 ### 3. Améliorations tirées de l'étude
-- [ ] Minuteur de repos qui alerte (vibration, son) et écran qui reste allumé pendant la séance
-- [ ] Calculateur de disques sur les exercices à la barre
-- [ ] Séries d'échauffement conseillées sur le premier gros exercice
+- [x] Minuteur de repos qui alerte (son existant + vibration) et rattrape le temps au retour ; écran allumé (existant)
+- [x] Calculateur de disques sur les exercices à la barre (barre de 20, 15 ou 10 kg)
+- [x] Séries d'échauffement conseillées sur le premier gros exercice (barre : 40/60/80 % ; haltères : 50/75 %)
 - [ ] Séances dans l'agenda du téléphone (.ics)
 - [ ] Suivi du poids lissé et ajustement automatique des calories
 - [ ] Supersets (plus tard)

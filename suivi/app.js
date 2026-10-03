@@ -66,7 +66,7 @@ const EXAMPLE_FROM = { goal: "muscle", level: "deb", days: "3", time: "4", eq: "
 const EXAMPLE = { from: EXAMPLE_FROM, sessions: buildPlan(EXAMPLE_FROM), example: true, paid: false };
 
 /* ===== État ===== */
-const defaultsProfile = () => ({ program: null, plan: "free", bundle: false, importedAt: null, lastCode: null, stage: null, body: null });
+const defaultsProfile = () => ({ program: null, plan: "free", bundle: false, importedAt: null, lastCode: null, stage: null, body: null, bar: 20 });
 let profile = defaultsProfile();
 let workouts = [];
 let active = null;
@@ -379,6 +379,61 @@ function setRowHTML(x, i, s, j) {
     <input type="text" inputmode="numeric" autocomplete="off" data-f="r" aria-label="Répétitions de la série ${j + 1}" value="${s.r ?? ""}" placeholder="${s.pr ?? ""}">
     <button type="button" class="chk" data-act="done" aria-pressed="${s.done ? "true" : "false"}" aria-label="Valider la série ${j + 1}">${ICON.check}</button></div>`;
 }
+/* ===== Barre et disques, séries d'échauffement ===== */
+const BAR_EX = ["squat", "frontsq", "rdl", "sdt", "hipthrust", "dc", "dib", "militaire", "rowbarre", "dcserre"];
+const DISQUES = [25, 20, 15, 10, 5, 2.5, 1.25];
+const barKg = () => (profile.bar === 15 || profile.bar === 10 ? profile.bar : 20);
+const isBarbell = x => BAR_EX.includes(x.id) && (!profile.program || from().eq === "gym");
+function platesFor(w, bar = barKg()) {
+  if (!(w > 0)) return null;
+  if (w < bar) return { light: true };
+  let side = Math.round((w - bar) / 2 * 100) / 100;
+  const out = [];
+  for (const p of DISQUES) while (side >= p - 1e-9) { out.push(p); side = Math.round((side - p) * 100) / 100; }
+  return { plates: out, rest: side };
+}
+function platesTxt(w) {
+  const r = platesFor(w);
+  if (!r) return "";
+  if (r.light) return `moins lourd que la barre (${barKg()} kg)`;
+  if (!r.plates.length) return `barre seule (${barKg()} kg)`;
+  return `par côté : ${r.plates.map(f1).join(" + ")}${r.rest > 0 ? ` (+ ${f1(r.rest)} kg à compléter)` : ""}`;
+}
+function nextWeight(x) { const st = x.sets.find(z => !z.done) || x.sets[x.sets.length - 1]; return st ? (st.w ?? st.pw ?? null) : null; }
+function platesHTML(x, i) {
+  if (!isBarbell(x)) return "";
+  const w = nextWeight(x);
+  return `<p class="plates" id="pl-${i}"><span>${w ? `${f1(w)} kg · ${esc(platesTxt(w))}` : "Indique une charge pour voir les disques à mettre."}</span> <button type="button" class="linkbtn" data-act="bar">barre de ${barKg()} kg</button></p>`;
+}
+function warmSets(x, i) {
+  const e = EXI[x.id], first = x.sets[0];
+  if (i !== 0 || !e || e.k !== "c" || !first) return [];
+  const W = first.w ?? first.pw;
+  if (!(W > 0)) return [];
+  if (isBarbell(x)) {
+    const bar = barKg();
+    if (W <= bar + 5) return [];
+    const steps = [[bar, 10], [W * 0.4, 8], [W * 0.6, 5], [W * 0.8, 3]].map(([w, r]) => [Math.max(bar, Math.round(w / 2.5) * 2.5), r]);
+    return steps.filter((st, k) => k === 0 || (st[0] > steps[k - 1][0] && st[0] < W));
+  }
+  if (W < 10) return [];
+  return [[W * 0.5, 8], [W * 0.75, 4]].map(([w, r]) => [Math.round(w), r]).filter(st => st[0] > 0 && st[0] < W);
+}
+function warmHTML(x, i, open) {
+  const ws = warmSets(x, i);
+  if (!ws.length) return "";
+  const bar = isBarbell(x);
+  return `<details class="warm" id="warm-${i}"${open ? " open" : ""}><summary>Échauffement conseillé · ${ws.length} séries légères</summary><ol>${ws.map(([w, r]) => `<li><b>${f1(w)} kg × ${r}</b>${bar ? ` <span class="muted">${esc(platesTxt(w))}</span>` : ""}</li>`).join("")}</ol><p class="muted small">Peu de repos, jamais à l'échec. Ces séries ne comptent pas dans ta séance.</p></details>`;
+}
+function refreshAids(i) {
+  const x = active && active.ex[i];
+  if (!x) return;
+  const pl = $("#pl-" + i), wm = $("#warm-" + i);
+  if (pl) pl.outerHTML = platesHTML(x, i);
+  const html = warmHTML(x, i, wm && wm.open);
+  if (wm) { if (html) wm.outerHTML = html; else wm.remove(); }
+  else if (html) { const anchor = $("#pl-" + i) || document.querySelector(`#ex-${i} .tip-line`); if (anchor) anchor.insertAdjacentHTML("afterend", html); }
+}
 function exCardHTML(x, i) {
   const e = EXI[x.id], t = x.target, timed = e && e.k === "t";
   const tgt = t ? `Objectif : ${t.sets} × ${t.reps}${e && e.u ? " / côté" : ""}${t.rir && t.rir !== "—" ? ` · RIR ${t.rir}` : ""} · repos ${t.rest}` : "";
@@ -388,7 +443,7 @@ function exCardHTML(x, i) {
   const anyDone = x.sets.some(s => s.done), demo = typeof DEMO !== "undefined" && DEMO.has(x.id);
   return `<article class="exc" id="ex-${i}" data-i="${i}">
     <div class="exhead">${demo ? `<button type="button" class="thumb" data-act="cues" data-i="${i}" aria-label="Démo animée : ${esc(x.n)}">${DEMO.thumb(x.id)}</button>` : ""}<h3>${esc(x.n)}</h3><button type="button" class="iconbtn" data-act="ex-menu" data-i="${i}" aria-expanded="false" aria-controls="exm-${i}" aria-label="Options : ${esc(x.n)}">${ICON.dots}</button></div>
-    ${tgt ? `<p class="target">${esc(tgt)}</p>` : ""}${tip}
+    ${tgt ? `<p class="target">${esc(tgt)}</p>` : ""}${tip}${platesHTML(x, i)}${warmHTML(x, i)}
     <div class="row" id="exm-${i}" hidden><button type="button" class="btn2" data-act="cues" data-i="${i}">${demo ? "Démo et consignes" : "Consignes"}</button><button type="button" class="btn2" data-act="replace" data-i="${i}"${anyDone ? " disabled" : ""}>Remplacer</button>${i > 0 ? `<button type="button" class="btn2" data-act="up" data-i="${i}">Monter</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="down" data-i="${i}">Descendre</button>` : ""}<button type="button" class="btn2" data-act="remove-ex" data-i="${i}">Retirer</button></div>
     <div class="cues" id="cues-${i}" hidden>${demo ? `<div class="anim-host" data-ex="${x.id}" data-name="${esc(x.n)}"></div>` : ""}${cues}</div>
     <div class="sets"><div class="srow h" aria-hidden="true"><span>#</span><span>Précédent</span><span>kg</span><span>${timed ? "Durée" : "Reps"}</span><span></span></div>${x.sets.map((s, j) => setRowHTML(x, i, s, j)).join("")}</div>
@@ -421,6 +476,7 @@ function toggleDone(i, j) {
     row.querySelector('[data-f="w"]').value = inVal(s.w);
     row.querySelector('[data-f="r"]').value = s.r ?? "";
   }
+  refreshAids(i);
   updateCount();
 }
 function buildSaved(a) {
@@ -479,7 +535,7 @@ function tickRest() {
   if (!rest) return;
   const left = Math.ceil((rest.end - Date.now()) / 1000);
   if (left <= 0) {
-    if (!rest.over) { rest.over = true; beep(); $("#rest-in").classList.add("over"); $("#rest-l").textContent = "Repos terminé : série suivante !"; $("#rest-t").textContent = "0:00"; $("#rest-p").style.width = "100%"; }
+    if (!rest.over) { rest.over = true; beep(); try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (e) { /* vibreur absent */ } $("#rest-in").classList.add("over"); $("#rest-l").textContent = "Repos terminé : série suivante !"; $("#rest-t").textContent = "0:00"; $("#rest-p").style.width = "100%"; }
     if (left < -15) stopRest();
     return;
   }
@@ -498,7 +554,7 @@ function beep() {
 }
 async function requestWake() { try { if ("wakeLock" in navigator && active && document.visibilityState === "visible" && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); } } catch (e) { wakeLock = null; } }
 function releaseWake() { try { if (wakeLock) wakeLock.release(); } catch (e) { /* déjà libéré */ } wakeLock = null; }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && active) requestWake(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "visible") return; if (active) requestWake(); tickRest(); });
 setInterval(() => { const c = $("#clock"); if (c && active) c.textContent = mmss((Date.now() - active.startedAt) / 1000); }, 1000);
 
 /* ===== Bibliothèque d'exercices ===== */
@@ -985,6 +1041,7 @@ document.addEventListener("click", e => {
     case "plan-pro": if (PAY()) { window.FONTE_PWA.checkout("premium"); break; } if (window.FONTE_PWA) { toast("L'abonnement en ligne arrive bientôt."); break; } profile.plan = "premium"; saveProfile(); render(); toast(profile.bundle ? `Premium activé à ${PRICE.bundle} par mois (démo).` : "Premium activé (démo)."); break;
     case "plan-free": if (PAY()) { openPortal(b); break; } profile.plan = "free"; saveProfile(); render(); break;
     case "portal": openPortal(b); break;
+    case "bar": profile.bar = barKg() === 20 ? 15 : barKg() === 15 ? 10 : 20; saveProfile(); if (active) active.ex.forEach((x, k) => refreshAids(k)); toast(`Barre de ${barKg()} kg.`); break;
     case "resilier": window.FONTE_PWA.cancelFlow(); break;
     case "data-export": window.FONTE_PWA.exportAll().then(() => toast("Tes données sont téléchargées (fichier JSON).")).catch(() => toast("Le téléchargement n'a pas pu se faire.")); break;
     case "data-erase": openConfirm("Supprimer toutes tes données de ce téléphone : programme, séances, conversations, accord et achats ? Copie d'abord ton code d'accès si tu as acheté quelque chose. C'est définitif.", "Tout supprimer", () => { window.FONTE_PWA.eraseAll(); location.reload(); }); break;
@@ -1005,6 +1062,7 @@ document.addEventListener("input", e => {
     if (!s) return;
     s[t.dataset.f] = num(t.value);
     saveActive();
+    if (t.dataset.f === "w") refreshAids(+row.dataset.i);
   } else if (t.matches(".note-in")) { const x = active && active.ex[+t.dataset.i]; if (x) { x.note = t.value.slice(0, 500); saveActive(); } }
 });
 document.addEventListener("submit", e => { if (e.target.id === "body-form") { e.preventDefault(); saveBody(); } });
