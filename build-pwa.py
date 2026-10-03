@@ -32,7 +32,7 @@ open(os.path.join(OUT, "index.html"), "w").write(page("Fonte", local_fonts(open(
 open(os.path.join(OUT, "carnet.html"), "w").write(page("Fonte · Carnet", local_fonts(open("suivi.html").read())))
 for d in ["fonts", "vendor", "legal"]:
     shutil.copytree(os.path.join("pwa", d), os.path.join(OUT, d))
-for f in ["pwa.js", "manifest.webmanifest"]:
+for f in ["pwa.js", "manifest.webmanifest", "decouvrir.html"]:
     shutil.copy(os.path.join("pwa", f), OUT)
 for f in os.listdir(os.path.join("pwa", "icons")):
     shutil.copy(os.path.join("pwa", "icons", f), os.path.join(OUT, "icons"))

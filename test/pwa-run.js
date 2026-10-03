@@ -117,6 +117,15 @@ server.listen(8791, async () => {
   await lp.screenshot({ path: path.join(DIR, "legal-conditions.png") });
   await lp.close();
 
+  // page de présentation : arguments, prix, questions, données structurées valides, sans débordement
+  const dp = await ctx.newPage();
+  await quiet(dp, "decouvrir");
+  await dp.goto(BASE + "decouvrir.html");
+  const dc = await dp.evaluate(() => ({ h1: document.querySelector("h1").textContent, cta: [...document.querySelectorAll("a.cta")].map(a => a.getAttribute("href")), ld: [...document.querySelectorAll('script[type="application/ld+json"]')].map(s => { try { return JSON.parse(s.textContent)["@type"]; } catch (e) { return "ERREUR"; } }), over: document.documentElement.scrollWidth > innerWidth, faq: document.querySelectorAll("details").length, font: getComputedStyle(document.querySelector("h1")).fontFamily }));
+  check("page_presentation", /payé une fois/.test(dc.h1) && dc.cta.every(h => h === "index.html") && dc.cta.length >= 3 && dc.ld.join() === "SoftwareApplication,FAQPage" && !dc.over && dc.faq >= 6 && /Barlow Condensed/.test(dc.font), dc);
+  await dp.screenshot({ path: path.join(DIR, "decouvrir.png") });
+  await dp.close();
+
   // installation : bandeau et bouton natif simulé
   const p2 = await ctx.newPage();
   await quiet(p2, "install");

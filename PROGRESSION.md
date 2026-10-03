@@ -47,7 +47,7 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Import de l'historique Strong et Hevy (CSV) : exercices reconnus en anglais ou en français, kilos ou livres, sans doublon, records recalculés
 - [x] Varier les exercices accessoires à chaque nouveau cycle (rotation déterministe, mêmes résultats dans Fonte et le carnet, exercices principaux gardés)
 - [x] Carte de séance à partager (image 1080 × 1350 générée sur le téléphone, partage natif ou enregistrement), depuis la fin de séance et l'historique
-- [ ] Page de présentation (arguments tirés de l'étude, prix, questions fréquentes)
+- [x] Page de présentation decouvrir.html (arguments tirés de l'étude, prix, questions fréquentes, données structurées pour les moteurs de recherche)
 
 ### 5. Livraison
 - [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
@@ -63,3 +63,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-04 : import Strong / Hevy ; test du carnet rendu robuste (attentes sur l'état au lieu de délais fixes).
 - 2026-10-04 : exercices accessoires renouvelés à chaque cycle ; le Programme suit le carnet même au niveau confirmé.
 - 2026-10-04 : carte de séance à partager.
+- 2026-10-04 : page de présentation ; deuxième vague terminée.

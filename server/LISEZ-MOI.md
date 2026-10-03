@@ -122,7 +122,7 @@ Si quelqu'un a perdu son téléphone sans avoir gardé son code d'accès : retro
 
 ## Ce que contient ce dossier
 
-- `public/` : l'appli installable (la même que le paquet `fonte-appli`).
+- `public/` : l'appli installable (la même que le paquet `fonte-appli`). La page `https://ton-adresse/decouvrir.html` présente Fonte (arguments, prix, questions fréquentes) : c'est elle à mettre dans tes publicités et sur tes réseaux.
 - `src/worker.js` : point d'entrée ; sert l'appli et l'API.
 - `src/coach.js` : le coach (SDK officiel d'Anthropic, Claude Opus 5.5, réflexion adaptative, cache du cerveau, repli automatique sur un autre modèle Claude si une demande est déclinée).
 - `src/api.js` : routes de l'API (coach, paiement, accès, portail).
