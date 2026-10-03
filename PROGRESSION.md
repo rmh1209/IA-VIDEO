@@ -41,7 +41,7 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Séries d'échauffement conseillées sur le premier gros exercice (barre : 40/60/80 % ; haltères : 50/75 %)
 - [x] Séances dans l'agenda du téléphone (.ics, rappel 30 min avant)
 - [x] Suivi du poids (tendance sur 3 semaines) et ajustement des calories selon l'objectif, 10 jours d'observation entre deux ajustements
-- [ ] Supersets (plus tard)
+- [x] Supersets et séries géantes (liaison, enchaînement sans repos, mémorisés par séance, repère dans l'historique)
 
 ### 4. Livraison
 - [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
@@ -53,3 +53,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-03 (nuit) : vérifications juridiques (résiliation, RLL, article 50, santé, Anthropic, hébergeur), preuve d'accord, guide mis à jour. Prochaine étape : étude des avis clients des concurrents.
 - 2026-10-03 (nuit) : étude des avis clients (docs/analyse-concurrence.md) ; améliorations retenues listées ci-dessus.
 - 2026-10-04 : agenda .ics, suivi du poids et calories adaptatives, cerveau du coach mis à jour ; 212 vérifications au vert. Reste : supersets, republier les artefacts, livrer.
+- 2026-10-04 : supersets dans le carnet ; cerveau du coach mis à jour.

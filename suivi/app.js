@@ -352,6 +352,7 @@ function startWorkout(si) {
   if (!s) return;
   const dl = stageNow(workouts).deload;
   active = { id: newId(), name: s.name, si, startedAt: Date.now(), deload: dl, ex: (dl ? s.ex.map(PG.deload) : s.ex).map(mkActiveEx) };
+  applySS(active);
   saveActive(); requestWake(); setView("seance"); window.scrollTo(0, 0);
 }
 function startFrom(w) {
@@ -425,6 +426,57 @@ function warmHTML(x, i, open) {
   const bar = isBarbell(x);
   return `<details class="warm" id="warm-${i}"${open ? " open" : ""}><summary>Échauffement conseillé · ${ws.length} séries légères</summary><ol>${ws.map(([w, r]) => `<li><b>${f1(w)} kg × ${r}</b>${bar ? ` <span class="muted">${esc(platesTxt(w))}</span>` : ""}</li>`).join("")}</ol><p class="muted small">Peu de repos, jamais à l'échec. Ces séries ne comptent pas dans ta séance.</p></details>`;
 }
+/* ===== Supersets : exercices voisins enchaînés sans repos, le repos vient après le dernier ===== */
+const ssRuns = () => {
+  const runs = [], ex = active ? active.ex : [];
+  for (let i = 0; i < ex.length; i++) {
+    if (!ex[i].ss) continue;
+    let j = i;
+    while (j + 1 < ex.length && ex[j + 1].ss === ex[i].ss) j++;
+    if (j > i) runs.push([i, j]);
+    i = j;
+  }
+  return runs;
+};
+function ssInfo(i) {
+  const runs = ssRuns(), k = runs.findIndex(([a, b]) => i >= a && i <= b);
+  if (k < 0) return null;
+  const [a, b] = runs[k];
+  return { letter: String.fromCharCode(65 + k), pos: i - a + 1, size: b - a + 1, last: i === b, next: i < b ? i + 1 : null, first: a };
+}
+function normalizeSS() {
+  const ex = active.ex, keep = new Set();
+  ssRuns().forEach(([a, b]) => { for (let k = a; k <= b; k++) keep.add(k); });
+  ex.forEach((x, k) => { if (x.ss && !keep.has(k)) delete x.ss; });
+}
+function toggleSS(i) {
+  const ex = active.ex, x = ex[i], y = ex[i + 1];
+  if (!x || !y) return;
+  if (x.ss && x.ss === y.ss) {
+    const fresh = newId();
+    for (let k = i + 1; k < ex.length && ex[k].ss === x.ss; k++) ex[k].ss = fresh;
+  } else {
+    const id = x.ss || newId(), old = y.ss;
+    x.ss = id;
+    for (let k = i + 1; k < ex.length && (k === i + 1 || (old && ex[k].ss === old)); k++) ex[k].ss = id;
+  }
+  normalizeSS();
+}
+/* mémorise les supersets d'une séance du programme pour les prochaines fois */
+function rememberSS(si) {
+  if (si == null || !active) return;
+  const runs = ssRuns().map(([a, b]) => active.ex.slice(a, b + 1).map(x => x.id));
+  profile.supersets = { ...(profile.supersets || {}), [si]: runs };
+}
+function applySS(a) {
+  const runs = (profile.supersets || {})[a.si] || [];
+  runs.forEach(ids => {
+    const start = a.ex.findIndex((x, k) => ids.every((id, m) => a.ex[k + m] && a.ex[k + m].id === id));
+    if (start < 0) return;
+    const g = newId();
+    ids.forEach((id, m) => { a.ex[start + m].ss = g; });
+  });
+}
 function refreshAids(i) {
   const x = active && active.ex[i];
   if (!x) return;
@@ -441,10 +493,11 @@ function exCardHTML(x, i) {
   const tip = isPro() ? `<p class="tip-line"><b>Conseil :</b> ${esc(sug.txt)}</p>` : `<p class="tip-line locked">Conseil de charge automatique avec Premium. <button type="button" class="linkbtn" data-act="go-offre">Voir l'offre</button></p>`;
   const cues = e ? `<p>${esc(e.c)}</p><p class="err"><b>Erreur fréquente :</b> ${esc(e.e)}</p>` : `<p>Exercice personnalisé.</p>`;
   const anyDone = x.sets.some(s => s.done), demo = typeof DEMO !== "undefined" && DEMO.has(x.id);
-  return `<article class="exc" id="ex-${i}" data-i="${i}">
+  const ss = ssInfo(i);
+  return `<article class="exc${ss ? " ss" : ""}" id="ex-${i}" data-i="${i}">${ss ? `<p class="ssbadge">Superset ${ss.letter} · ${ss.letter}${ss.pos} sur ${ss.size}${ss.last ? " · puis repos" : " · enchaîne sans repos"}</p>` : ""}
     <div class="exhead">${demo ? `<button type="button" class="thumb" data-act="cues" data-i="${i}" aria-label="Démo animée : ${esc(x.n)}">${DEMO.thumb(x.id)}</button>` : ""}<h3>${esc(x.n)}</h3><button type="button" class="iconbtn" data-act="ex-menu" data-i="${i}" aria-expanded="false" aria-controls="exm-${i}" aria-label="Options : ${esc(x.n)}">${ICON.dots}</button></div>
     ${tgt ? `<p class="target">${esc(tgt)}</p>` : ""}${tip}${platesHTML(x, i)}${warmHTML(x, i)}
-    <div class="row" id="exm-${i}" hidden><button type="button" class="btn2" data-act="cues" data-i="${i}">${demo ? "Démo et consignes" : "Consignes"}</button><button type="button" class="btn2" data-act="replace" data-i="${i}"${anyDone ? " disabled" : ""}>Remplacer</button>${i > 0 ? `<button type="button" class="btn2" data-act="up" data-i="${i}">Monter</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="down" data-i="${i}">Descendre</button>` : ""}<button type="button" class="btn2" data-act="remove-ex" data-i="${i}">Retirer</button></div>
+    <div class="row" id="exm-${i}" hidden><button type="button" class="btn2" data-act="cues" data-i="${i}">${demo ? "Démo et consignes" : "Consignes"}</button><button type="button" class="btn2" data-act="replace" data-i="${i}"${anyDone ? " disabled" : ""}>Remplacer</button>${i > 0 ? `<button type="button" class="btn2" data-act="up" data-i="${i}">Monter</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="down" data-i="${i}">Descendre</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="ss-link" data-i="${i}">${x.ss && active.ex[i + 1].ss === x.ss ? "Délier du suivant" : "Superset avec le suivant"}</button>` : ""}<button type="button" class="btn2" data-act="remove-ex" data-i="${i}">Retirer</button></div>
     <div class="cues" id="cues-${i}" hidden>${demo ? `<div class="anim-host" data-ex="${x.id}" data-name="${esc(x.n)}"></div>` : ""}${cues}</div>
     <div class="sets"><div class="srow h" aria-hidden="true"><span>#</span><span>Précédent</span><span>kg</span><span>${timed ? "Durée" : "Reps"}</span><span></span></div>${x.sets.map((s, j) => setRowHTML(x, i, s, j)).join("")}</div>
     <div class="exfoot"><button type="button" class="btn2" data-act="add-set" data-i="${i}">+ Série</button>${x.sets.length > 1 ? `<button type="button" class="btn2" data-act="del-set" data-i="${i}">− Série</button>` : ""}<span class="sp"></span><button type="button" class="linkbtn" data-act="note" data-i="${i}">${x.note ? "Note" : "Ajouter une note"}</button>${x.note || x.showNote ? `<textarea class="note-in" data-i="${i}" aria-label="Note pour ${esc(x.n)}" placeholder="Sensations, réglage machine, douleur…">${esc(x.note)}</textarea>` : ""}</div>
@@ -467,7 +520,13 @@ function toggleDone(i, j) {
     if (s.r == null) { toast("Indique le nombre de répétitions."); const inp = row && row.querySelector('[data-f="r"]'); if (inp) inp.focus(); return; }
     s.done = true;
     ensureAudio();
-    startRest(restSec(x.target ? x.target.rest : "90 s"), `Repos · ${x.n}`);
+    const ss = ssInfo(i);
+    if (ss && !ss.last) {
+      stopRest();
+      const nx = active.ex[ss.next];
+      toast(`Enchaîne : ${nx.n}`);
+      setTimeout(() => { const inp = document.querySelector(`.srow[data-i="${ss.next}"][data-j="${Math.min(j, nx.sets.length - 1)}"] [data-f="w"]`); if (inp) { inp.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" }); inp.focus({ preventScroll: true }); } }, 60);
+    } else startRest(restSec(x.target ? x.target.rest : "90 s"), ss ? `Repos · superset ${ss.letter}` : `Repos · ${x.n}`);
   } else s.done = false;
   saveActive();
   if (row) {
@@ -481,7 +540,7 @@ function toggleDone(i, j) {
 }
 function buildSaved(a) {
   const endedAt = Date.now();
-  const ex = a.ex.map(x => ({ id: x.id, n: x.n, target: x.target || null, note: (x.note || "").slice(0, 500), sets: x.sets.filter(s => s.done).map(s => ({ w: s.w ?? null, r: s.r ?? null })) })).filter(x => x.sets.length);
+  const ex = a.ex.map((x, k) => { const ss = ssInfo(k); return { id: x.id, n: x.n, target: x.target || null, note: (x.note || "").slice(0, 500), ...(ss ? { ss: ss.letter } : {}), sets: x.sets.filter(s => s.done).map(s => ({ w: s.w ?? null, r: s.r ?? null })) }; }).filter(x => x.sets.length);
   const prs = [];
   ex.forEach(x => {
     const key = keyOf(x), b = bestSet(x.sets);
@@ -511,6 +570,7 @@ function saveFinished() {
   if (!pendingSave) return;
   const w = pendingSave;
   pendingSave = null;
+  if (active && active.si != null && program().sessions[active.si]) { rememberSS(active.si); saveProfile(); }
   putWorkout(w);
   active = null; saveActive(); stopRest(); releaseWake(); closeSheet();
   demo = null;
@@ -525,6 +585,8 @@ function discardWorkout() { active = null; saveActive(); stopRest(); releaseWake
 /* ===== Minuteur, son, écran allumé ===== */
 function startRest(sec, label) {
   rest = { end: Date.now() + sec * 1000, total: sec, label, over: false };
+  $("#toast").hidden = true; // le minuteur prend la place du message
+  clearTimeout(toastTimer);
   $("#rest").hidden = false;
   $("#rest-in").classList.remove("over");
   clearInterval(restTimer);
@@ -1013,8 +1075,9 @@ document.addEventListener("click", e => {
     }
     case "note": { const x = active.ex[i]; x.showNote = true; rerenderCard(i); const t = document.querySelector(`.note-in[data-i="${i}"]`); if (t) t.focus(); break; }
     case "replace": openLibrary("replace", i); break;
-    case "up": case "down": { const j = act === "up" ? i - 1 : i + 1; const a = active.ex; [a[i], a[j]] = [a[j], a[i]]; saveActive(); renderSeance(true); break; }
-    case "remove-ex": { const x = active.ex[i]; const doIt = () => { active.ex.splice(i, 1); saveActive(); closeSheet(); renderSeance(true); }; if (x.sets.some(s => s.done)) openConfirm(`Retirer « ${x.n} » et ses séries validées ?`, "Retirer", doIt); else doIt(); break; }
+    case "up": case "down": { const j = act === "up" ? i - 1 : i + 1; const a = active.ex; [a[i], a[j]] = [a[j], a[i]]; delete a[i].ss; delete a[j].ss; normalizeSS(); saveActive(); renderSeance(true); break; }
+    case "ss-link": { toggleSS(i); saveActive(); renderSeance(true); const inf = ssInfo(i); toast(inf ? `Superset ${inf.letter} : enchaîne ces exercices, repos après le dernier.` : "Exercices déliés."); break; }
+    case "remove-ex": { const x = active.ex[i]; const doIt = () => { active.ex.splice(i, 1); normalizeSS(); saveActive(); closeSheet(); renderSeance(true); }; if (x.sets.some(s => s.done)) openConfirm(`Retirer « ${x.n} » et ses séries validées ?`, "Retirer", doIt); else doIt(); break; }
     case "add-ex": openLibrary("add"); break;
     case "lib-pick": pickExercise(EXI[b.dataset.id]); break;
     case "lib-custom": pickExercise(null, lib.q.trim()); break;
