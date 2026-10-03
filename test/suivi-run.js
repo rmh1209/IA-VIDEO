@@ -141,7 +141,10 @@ function code(obj) { return "F1" + Buffer.from(JSON.stringify(obj), "utf8").toSt
   const csv = await page.evaluate(() => window.__saved);
   check("export_csv", csv.filename === "fonte-suivi.csv" && /Goblet squat;1;42,5;10/.test(csv.data), csv.data.slice(0, 200));
 
-  // Persistance (rechargement)
+  // Persistance (rechargement) : la base simulée est transmise telle quelle à la page rechargée, comme le ferait le serveur
+  // (le stockage local des pages file:// n'est pas toujours conservé par Chromium d'un chargement à l'autre)
+  const snapshot = await page.evaluate(() => JSON.stringify(Object.fromEntries(window.__store)));
+  await page.addInitScript(data => { const st = window.__store; if (st && st.size === 0) { Object.entries(JSON.parse(data)).forEach(([k, v]) => st.set(k, v)); localStorage.setItem("__mockdb", data); } }, snapshot);
   await page.reload();
   await page.waitForSelector("[data-act=start]");
   await page.waitForFunction(() => workouts.length === 2 && profile.plan === "premium", null, { timeout: 8000 }).catch(() => {});
