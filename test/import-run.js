@@ -59,6 +59,15 @@ const check = (name, cond, extra) => { R[name] = cond ? "OK" : "FAIL " + JSON.st
   await page.waitForTimeout(200);
   check("fichier_refuse", /pas un export Strong ou Hevy/.test(await page.textContent("#toast")));
   fs.unlinkSync(path.join(FX, "autre.csv"));
+  // fichier piégé (HTML et script dans les noms et les notes) : rien ne s'exécute, sur aucun écran
+  await page.setInputFiles("#import-csv", path.join(FX, "piege.csv"));
+  await page.waitForSelector('[data-act="import-go"]');
+  await page.click('[data-act="import-go"]');
+  for (const v of ["seance", "historique", "progres", "offre"]) { await page.click(`.nav [data-view="${v}"]`); await page.waitForTimeout(120); }
+  await page.click('.nav [data-view="historique"]');
+  await page.evaluate(() => { for (const w of workouts) { detailId = w.id; renderHistory(); } detailId = null; renderHistory(); profile.plan = "premium"; render(true); });
+  const xss = await page.evaluate(() => ({ x: window.__xss || null, imgs: document.querySelectorAll('img[src="x"], svg[onload]').length }));
+  check("import_sans_injection", xss.x === null && xss.imgs === 0, xss);
   await browser.close();
   R.errors = errors;
   console.log(JSON.stringify(R, null, 1));
