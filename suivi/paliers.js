@@ -119,10 +119,10 @@ function nextStage() {
   if (!s.complete) return;
   const keep = { paid: !!P.paid, example: !!P.example };
   if (s.last) {
-    const nf = { ...P.from, level: PG.NEXT_LEVEL[P.from.level] || P.from.level };
+    const cycle = (st.cycle || 1) + 1, nf = { ...P.from, level: PG.NEXT_LEVEL[P.from.level] || P.from.level, cycle };
     profile.program = { ...keep, from: nf, sessions: buildPlan(nf) };
-    profile.stage = { n: 1, at: Date.now(), cycle: (st.cycle || 1) + 1, done: (st.done || 0) + 1 };
-    toast(`Cycle ${profile.stage.cycle} : nouveau programme ${LABEL.level[nf.level].toLowerCase()}, +${PG.PTS.stade} points.`);
+    profile.stage = { n: 1, at: Date.now(), cycle, done: (st.done || 0) + 1 };
+    toast(`Cycle ${cycle} : nouveau programme ${LABEL.level[nf.level].toLowerCase()}, exercices accessoires renouvelés, +${PG.PTS.stade} points.`);
   } else {
     profile.program = { ...keep, from: P.from, sessions: PG.applyStage(P.sessions, s.n + 1, P.from.goal) };
     profile.stage = { n: s.n + 1, at: Date.now(), cycle: st.cycle || 1, done: (st.done || 0) + 1 };

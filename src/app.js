@@ -47,14 +47,14 @@ function candidates(p, st) {
   return EX.map((e, i) => ({ e, i })).filter(o => o.e.p === p && okFor(o.e, st))
     .sort((a, b) => score(b.e) - score(a.e) || a.i - b.i).map(o => o.e);
 }
-function pickSlot(slot, used, st) {
+function pickSlot(slot, used, st, rot = 0) {
   let p = slot, idx = 0, prefs = null;
   if (slot.includes("=")) { const parts = slot.split("="); p = parts[0]; prefs = parts[1].split(","); }
   else if (slot.includes(":")) { const parts = slot.split(":"); p = parts[0]; idx = +parts[1]; }
   const ok = candidates(p, st);
-  if (prefs) for (const id of prefs) { const e = ok.find(x => x.id === id && !used.has(x.id)); if (e) return e; }
+  if (prefs) { const avail = prefs.map(id => ok.find(x => x.id === id && !used.has(x.id))).filter(Boolean); if (avail.length) return avail[rot % avail.length]; }
   const pool = ok.filter(e => !used.has(e.id));
-  return pool.length ? pool[idx % pool.length] : null;
+  return pool.length ? pool[(idx + rot) % pool.length] : null;
 }
 function exCount(st) { let n = +st.time; if ((st.goal === "seche" || st.goal === "forme") && n >= 4) n++; return n; }
 function roleOf(e, pos) { if (e.p === "core") return "gainage"; if (e.k === "i" || e.k === "t") return "isolation"; return pos <= 1 ? "principal" : "secondaire"; }
@@ -71,13 +71,15 @@ function mkEx(e, role, st) {
   const x = { id: e.id, n: e.n, role, ...doseFor(e, role, st) }, n = stageN(st);
   return n > 1 ? { ...x, b: { sets: x.sets, reps: x.reps, rest: x.rest, rir: x.rir }, ...PROGRESSION.doseAt(x, role, n, st.goal) } : x;
 }
+/* à chaque nouveau cycle, les exercices accessoires changent (les deux principaux restent, pour suivre les progrès) */
+const rotOf = st => Math.max(0, (+st.cycle || 1) - 1);
 function buildPlan(st) {
-  const n = exCount(st);
+  const n = exCount(st), rot = rotOf(st);
   const sessions = SPLIT[st.days].map((key, d) => {
     const tpl = T[key], used = new Set(), ex = [];
     for (const slot of tpl.s) {
       if (ex.length >= n) break;
-      const e = pickSlot(slot, used, st);
+      const e = pickSlot(slot, used, st, ex.length >= 2 ? rot : 0);
       if (!e) continue;
       used.add(e.id);
       ex.push(mkEx(e, roleOf(e, ex.length), st));
@@ -312,13 +314,13 @@ function pullSuivi() {
   try { d = JSON.parse(localStorage.getItem("fonte.shared") || "null"); } catch (e) { d = null; }
   if (!d || !d.stage || !plan) return;
   const cyc = +d.stage.cycle || 1, n = Math.min(3, Math.max(1, +d.stage.n || 1));
-  if (d.from && cyc > (+plan.from.cycle || 1) && LABEL.level[d.from.level] && d.from.level !== plan.from.level) {
+  if (d.from && cyc > (+plan.from.cycle || 1) && LABEL.level[d.from.level]) {
     const u = pushUndo();
     state = { ...state, level: d.from.level, stage: 1, cycle: cyc };
     plan = buildPlan(clone(state));
     edits = [];
     renderAll(); save();
-    toast(`Cycle ${cyc} : nouveau programme de niveau ${LABEL.level[state.level].toLowerCase()}.`, u);
+    toast(`Cycle ${cyc} : nouveau programme de niveau ${LABEL.level[state.level].toLowerCase()}, exercices accessoires renouvelés.`, u);
     return;
   }
   if (n !== stageN(plan.from)) setStage(n, true);

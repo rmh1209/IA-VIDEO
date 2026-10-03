@@ -29,14 +29,14 @@ function candidates(p, st) {
   const score = e => (st.goal === "force" && e.fx ? 2 : 0) + (st.level === "deb" && isDb(e) ? 1 : 0);
   return EX.map((e, i) => ({ e, i })).filter(o => o.e.p === p && okFor(o.e, st)).sort((a, b) => score(b.e) - score(a.e) || a.i - b.i).map(o => o.e);
 }
-function pickSlot(slot, used, st) {
+function pickSlot(slot, used, st, rot = 0) {
   let p = slot, idx = 0, prefs = null;
   if (slot.includes("=")) { const parts = slot.split("="); p = parts[0]; prefs = parts[1].split(","); }
   else if (slot.includes(":")) { const parts = slot.split(":"); p = parts[0]; idx = +parts[1]; }
   const ok = candidates(p, st);
-  if (prefs) for (const id of prefs) { const e = ok.find(x => x.id === id && !used.has(x.id)); if (e) return e; }
+  if (prefs) { const avail = prefs.map(id => ok.find(x => x.id === id && !used.has(x.id))).filter(Boolean); if (avail.length) return avail[rot % avail.length]; }
   const pool = ok.filter(e => !used.has(e.id));
-  return pool.length ? pool[idx % pool.length] : null;
+  return pool.length ? pool[(idx + rot) % pool.length] : null;
 }
 function roleOf(e, pos) { if (e.p === "core") return "gainage"; if (e.k === "i" || e.k === "t") return "isolation"; return pos <= 1 ? "principal" : "secondaire"; }
 function doseFor(e, role, st) {
@@ -47,13 +47,15 @@ function doseFor(e, role, st) {
   if (st.level === "conf") { if (role === "principal") sets += 1; if (role === "isolation") rir = "0 à 1"; }
   return { sets, reps: e.rr || D.r, rest: D.rest, rir };
 }
+/* à chaque nouveau cycle, les exercices accessoires changent (même règle que dans Fonte) */
 function buildPlan(st) {
   let n = +st.time; if ((st.goal === "seche" || st.goal === "forme") && n >= 4) n++;
+  const rot = Math.max(0, (+st.cycle || 1) - 1);
   return SPLIT[st.days].map((key, d) => {
     const tpl = T[key], used = new Set(), ex = [];
     for (const slot of tpl.s) {
       if (ex.length >= n) break;
-      const e = pickSlot(slot, used, st);
+      const e = pickSlot(slot, used, st, ex.length >= 2 ? rot : 0);
       if (!e) continue;
       used.add(e.id);
       ex.push({ id: e.id, n: e.n, ...doseFor(e, roleOf(e, ex.length), st) });
