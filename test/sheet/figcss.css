@@ -1,0 +1,23 @@
+:root{--bg:#EEF0ED;--surface:#FFFFFF;--sunk:#E3E7E3;--ink:#18202A;--muted:#5B6672;--line:#D5DAD6;--red:#C8322F;--blue:#2457A6;--green:#2F8A4E;
+--fig:#1F2A36;--fig2:#9AA3AD;--eq:#7B8591;--eqf:#E1E5E1;--figbg:#FFFFFF;--body:system-ui,sans-serif}
+.fig{display:block;width:100%;height:auto}
+.fig line,.fig polyline{stroke-linecap:round;stroke-linejoin:round;fill:none}
+.fig .bd{stroke:var(--fig)}
+.fig .bf{stroke:var(--fig2)}
+.fig .hd{fill:var(--fig)}
+.fig .hf{fill:var(--fig2)}
+.fig .ring{stroke:var(--figbg);stroke-width:2}
+.fig .tf{fill:var(--fig);stroke:var(--fig);stroke-width:5;stroke-linejoin:round}
+.fig .hl{stroke:var(--red)}
+.fig .hlf{fill:var(--red)}
+.fig .eq{stroke:var(--eq)}
+.fig .pf{stroke:var(--eqf)}
+.fig .eqf{fill:var(--eqf);stroke:var(--eq);stroke-width:1.5}
+.fig .eqb{fill:var(--blue);opacity:.75}
+.fig .eqd{fill:var(--eq);stroke:var(--eq)}
+.fig .eqh{fill:var(--eqf)}
+.fig .ca{stroke:var(--eq)}
+.fig .band{stroke:var(--green)}
+.fig .mat{fill:var(--eqf)}
+.fig .gr{stroke:var(--line)}
+.fig .vlab{font-family:var(--body);font-weight:600;fill:var(--muted)}

@@ -1,0 +1,45 @@
+# Fonte : plan de travail continu
+
+Demande (3 octobre 2026) : continuer d'améliorer l'appli, la rendre conforme (RGPD, droit de la consommation),
+travailler en continu (reprendre dès que la limite d'utilisation se lève) et l'améliorer face aux applis
+concurrentes en s'appuyant sur les avis clients.
+
+## Reprendre après une coupure
+
+1. Si le conteneur est neuf : `cd /home/user/IA-VIDEO && git fetch origin claude/fonte-app && git worktree add /home/user/fonte-app claude/fonte-app`
+2. `cd /home/user/fonte-app/server && npm install && cd ../test && npm install`
+3. `python3 build-pwa.py`, puis les tests du README.
+4. Reprendre la première case non cochée ci-dessous ; cocher, noter au journal, committer, pousser.
+
+## Déjà fait
+
+- Fonte (programme, coach outillé, nutrition, mobilité, PDF), Fonte Suivi (carnet), démos animées (95 exercices),
+  paliers / stades / repères de force, appli installable unique (hors connexion, installation).
+- Serveur Cloudflare : coach Claude (SDK officiel, diffusion en direct, outils exécutés dans l'appli, cache, repli),
+  paiement Stripe (19 €, Premium 4,99 € / 2,49 €), jetons d'accès signés, quotas, portail client, code d'accès.
+- 170 vérifications automatiques au vert.
+
+## À faire, par priorité
+
+### 1. Conformité légale et RGPD
+- [ ] Pages légales (mentions légales, confidentialité, conditions générales) ; infos de l'éditeur à un seul endroit
+- [ ] Consentement explicite avant le coach (données de santé, IA, 15 ans et plus), vérifié par le serveur
+- [ ] Aucune requête vers des tiers dans l'appli installée (polices et jsPDF servis par l'appli)
+- [ ] Export, import et suppression de toutes les données (portabilité, effacement)
+- [ ] Bouton « Résilier mon abonnement » (résiliation en trois clics) et confirmation
+- [ ] Transparence IA (règlement européen), avertissement santé
+- [ ] Journaux serveur minimaux ; registre des traitements ; liste de contrôle pour l'éditeur
+- [ ] Plus de déblocage « démo » dans l'appli installée quand le paiement n'est pas branché
+
+### 2. Étude des avis clients des meilleures applis
+- [ ] Hevy, Strong, Fitbod, JEFIT, Freeletics, Alpha Progression, MacroFactor, Boostcamp… → `docs/analyse-concurrence.md`
+
+### 3. Améliorations tirées de l'étude (à confirmer par l'étude)
+- [ ] À définir après l'étude
+
+### 4. Livraison
+- [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
+
+## Journal
+
+- 2026-10-03 : projet versionné sur la branche `claude/fonte-app` (dépôt IA-VIDEO, branche dédiée sans lien avec hoopcut).

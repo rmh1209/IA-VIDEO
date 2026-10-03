@@ -1,0 +1,33 @@
+FONTE : L'APPLI INSTALLABLE
+===========================
+
+Le dossier « fonte-appli » contient toute l'appli : le Programme (index.html) et le Carnet (carnet.html),
+réunis sous une seule icône. Une fois en ligne à une adresse en https, n'importe qui peut l'installer :
+
+- Android et ordinateur (Chrome, Edge) : un bandeau « Installe Fonte » propose le bouton Installer.
+- iPhone et iPad (Safari) : le bandeau explique comment faire : Partager, puis « Sur l'écran d'accueil ».
+
+Après la première ouverture, l'appli marche même sans réseau (pratique à la salle).
+
+
+METTRE EN LIGNE EN 2 MINUTES (gratuit)
+--------------------------------------
+1. Décompresse le fichier zip.
+2. Va sur https://app.netlify.com/drop (crée un compte gratuit si on te le demande).
+3. Fais glisser le dossier « fonte-appli » dans la page.
+4. Netlify te donne une adresse en https (tu peux la renommer, ou brancher ton propre nom de domaine).
+5. Ouvre cette adresse sur ton téléphone : le bandeau d'installation apparaît.
+
+Autres hébergeurs possibles : Cloudflare Pages, Vercel, GitHub Pages, ou ton propre hébergement en https.
+Le dossier doit être servi tel quel, avec les deux pages au même endroit.
+
+
+À SAVOIR AVANT D'OUVRIR AU PUBLIC
+---------------------------------
+- Ce paquet est la version « vitrine » : en ligne seule, l'appli affiche « Le coach IA arrive bientôt »
+  et les boutons « Débloquer » et « Premium » restent en mode démo (rien n'est encaissé).
+- Pour le vrai coach IA et le vrai paiement, utilise le paquet « fonte-en-ligne » : la même appli plus
+  son serveur (Cloudflare), avec le coach Claude et le paiement Stripe. Tout est expliqué dans son LISEZ-MOI.
+- Données : les séances et le programme sont enregistrés sur le téléphone de chaque utilisateur.
+- Mentions légales, conditions de vente et politique de confidentialité sont obligatoires
+  pour une appli publique en France.

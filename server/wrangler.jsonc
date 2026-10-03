@@ -1,0 +1,30 @@
+// Fonte en ligne : l'appli installable (dossier public) et son API, sur Cloudflare Workers.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fonte",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  // arrête l'appel au coach si l'utilisateur quitte la page en cours de réponse
+  "compatibility_flags": ["enable_request_signal"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": true
+  },
+  // compteurs des questions offertes et plafonds anti-abus ; l'id est ajouté par :
+  //   npx wrangler kv namespace create QUOTAS --binding QUOTAS --update-config
+  "kv_namespaces": [
+    { "binding": "QUOTAS" }
+  ],
+  // prix Stripe : remplis par  npm run produits-stripe
+  // secrets (jamais ici) : npx wrangler secret put ANTHROPIC_API_KEY | STRIPE_SECRET_KEY | ACCESS_SECRET
+  "vars": {
+    "STRIPE_PRICE_FONTE": "",
+    "STRIPE_PRICE_PREMIUM": "",
+    "STRIPE_PRICE_PREMIUM_REDUIT": "",
+    "STRIPE_PORTAL_CONFIG": ""
+  },
+  "observability": { "enabled": true }
+}

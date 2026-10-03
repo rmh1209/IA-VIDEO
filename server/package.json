@@ -1,0 +1,21 @@
+{
+  "name": "fonte-en-ligne",
+  "private": true,
+  "type": "module",
+  "description": "Fonte : appli installable (programme, carnet, démos) avec coach IA et paiement",
+  "scripts": {
+    "local": "wrangler dev",
+    "deployer": "wrangler deploy",
+    "produits-stripe": "node outils/creer-produits-stripe.mjs",
+    "verifier": "wrangler deploy --dry-run --outdir .wrangler/verif"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

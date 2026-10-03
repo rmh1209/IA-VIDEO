@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "Fonte : programme, démos et carnet de musculation",
+  "short_name": "Fonte",
+  "description": "Ton programme de musculation sur mesure, la démo de chaque exercice et ton carnet de séances avec paliers et stades.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EEF0ED",
+  "theme_color": "#18202A",
+  "categories": ["health", "fitness", "sports"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Démarrer ma séance", "short_name": "Séance", "url": "./carnet.html", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Mes progrès et paliers", "short_name": "Progrès", "url": "./carnet.html#progres", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ]
+}

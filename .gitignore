@@ -1,0 +1,20 @@
+# dépendances et états locaux
+node_modules/
+.wrangler/
+.dev.vars
+# fichiers produits par les scripts de build (python3 build-pwa.py)
+dist/
+fonte.html
+suivi.html
+server/public/
+server/src/brain.js
+test/page.html
+test/suivi-page.html
+# sorties des tests
+test/*.png
+test/*.pdf
+test/srv/state/
+test/srv/bundle/
+test/srv/produits/
+test/srv/patch/
+test/srv/*.log
