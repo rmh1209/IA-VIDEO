@@ -29,7 +29,7 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Bouton « Résilier mon abonnement » (trois clics), effet en fin de mois payé, confirmation téléchargeable
 - [x] Transparence IA (règlement européen), avertissement santé ; accord exprès avant paiement (rétractation) gardé dans Stripe et sur la facture
 - [x] Journaux serveur minimaux (sans journal de requêtes) ; paiement réel bloqué tant que les mentions légales manquent
-- [ ] Registre des traitements et liste de contrôle pour l'éditeur (docs/conformite.md) ; vérifier les points juridiques en ligne
+- [x] Registre des traitements et liste de contrôle pour l'éditeur (docs/conformite.md, CONFORMITE.md dans le paquet) ; points juridiques vérifiés en ligne ; preuve d'accord gardée 6 mois ; lien de résiliation sans téléphone (portail Stripe)
 - [x] Plus de déblocage « démo » dans l'appli installée quand le paiement n'est pas branché
 
 ### 2. Étude des avis clients des meilleures applis
@@ -45,3 +45,4 @@ concurrentes en s'appuyant sur les avis clients.
 
 - 2026-10-03 : projet versionné sur la branche `claude/fonte-app` (dépôt IA-VIDEO, branche dédiée sans lien avec hoopcut).
 - 2026-10-03 (soir) : conformité RGPD et droit de la consommation dans l'appli et le serveur ; tous les tests au vert (dont 31 vérifications de bout en bout).
+- 2026-10-03 (nuit) : vérifications juridiques (résiliation, RLL, article 50, santé, Anthropic, hébergeur), preuve d'accord, guide mis à jour. Prochaine étape : étude des avis clients des concurrents.

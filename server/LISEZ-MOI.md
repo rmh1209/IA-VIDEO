@@ -103,16 +103,22 @@ Puis `npx wrangler deploy`. Garde 3 questions offertes : c'est le nombre écrit 
 
 - **Journaux en direct** : `npx wrangler tail` (ou Cloudflare > Workers > fonte > Journaux).
 - **« Le coach IA arrive bientôt »** : `ANTHROPIC_API_KEY` manquante, ou l'espace des compteurs pas créé (étape 3).
-- **Boutons de paiement en mode démo** : prix Stripe vides dans `wrangler.jsonc` (étape 4 puis `npx wrangler deploy`), ou `STRIPE_SECRET_KEY` / `ACCESS_SECRET` manquants.
+- **« Paiement en ligne bientôt disponible »** : prix Stripe vides dans `wrangler.jsonc` (étape 4 puis `npx wrangler deploy`), `STRIPE_SECRET_KEY` / `ACCESS_SECRET` manquants, ou, avec une clé réelle, informations de l'éditeur incomplètes (voir plus bas). `https://ton-adresse/api/config` indique `"legal": false` dans ce dernier cas.
 - **« Gérer mon abonnement » ne s'ouvre pas** : active le portail client dans Stripe (Paramètres > Billing > Portail client).
 - **Essayer sur ton ordinateur** : après l'étape 4, copie `.dev.vars.exemple` en `.dev.vars`, remplis-le, puis lance `npm run local` et ouvre http://localhost:8787.
 
 ## Avant d'encaisser : les obligations
 
-- **Mentions légales, conditions générales de vente et politique de confidentialité**, accessibles depuis l'appli ou ton site.
-- **Contenu numérique** : la page de paiement rappelle que l'accès immédiat fait perdre le droit de rétractation (article L221-28 du Code de la consommation). Reprends-le dans tes conditions de vente.
-- **Données personnelles (RGPD)** : les questions posées au coach sont transmises à Anthropic pour produire la réponse ; le paiement est traité par Stripe ; le serveur ne garde qu'une empreinte de l'adresse IP pendant 2 jours, contre les abus. Le programme et les séances restent sur le téléphone de la personne. Cite ces trois prestataires (Anthropic, Stripe, Cloudflare) dans ta politique de confidentialité.
-- **Prix** : les prix créés sont TTC. Vérifie ton régime de TVA (micro-entreprise ou non) avec ton comptable.
+L'appli contient déjà les pages légales (mentions légales, confidentialité, conditions générales avec le formulaire de rétractation), l'accord explicite avant le coach, la case de renonciation avant le paiement et la résiliation en trois clics. Il te reste à :
+
+1. **Renseigner l'éditeur** dans `wrangler.jsonc`, rubrique `vars` : `EDITEUR_NOM`, `EDITEUR_STATUT`, `EDITEUR_ADRESSE`, `EDITEUR_EMAIL`, `EDITEUR_TELEPHONE`, `EDITEUR_SIRET`, `EDITEUR_TVA` (par exemple « TVA non applicable, art. 293 B du CGI »), `EDITEUR_DIRECTEUR`, et `EDITEUR_RCS` si tu es immatriculé au RCS. Puis `npx wrangler deploy`. Tant que ces champs manquent, les pages légales les affichent en rouge et **le paiement réel reste bloqué** (une clé `sk_live_` ne suffit pas).
+2. **Choisir un médiateur de la consommation** (obligatoire pour vendre aux particuliers) et renseigner `MEDIATEUR_NOM` et `MEDIATEUR_SITE`.
+3. **Stripe** : active le portail client et son lien de connexion (Paramètres > Billing > Portail client), copie ce lien dans `PORTAIL_CONNEXION` (il permet de résilier sans son téléphone), active l'envoi des reçus et des factures par e-mail.
+4. Lis `CONFORMITE.md` : ce que l'appli fait, les points vérifiés, ton registre des traitements prêt à l'emploi et la liste de contrôle complète.
+
+## Support : retrouver un achat
+
+Si quelqu'un a perdu son téléphone sans avoir gardé son code d'accès : retrouve son paiement dans Stripe (par son e-mail), ouvre la session de paiement (identifiant `cs_...`) et envoie-lui le lien `https://ton-adresse/index.html?achat=cs_...` (ou `/carnet.html?achat=cs_...#offre` pour Premium). En l'ouvrant, l'appli vérifie le paiement auprès de Stripe et redonne l'accès.
 
 ## Ce que contient ce dossier
 

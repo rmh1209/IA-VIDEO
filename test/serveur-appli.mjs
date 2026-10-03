@@ -202,6 +202,8 @@ try {
   const hIndex = await fetch(BASE + "/index.html"), hLegal = await fetch(BASE + "/legal/conditions.html");
   await page.goto(BASE + "/legal/conditions.html");
   const lg = await page.evaluate(() => ({ todo: document.querySelectorAll(".todo").length, txt: document.body.textContent }));
+  const portalLink = await page.evaluate(() => { const a = [...document.querySelectorAll("a")].find(x => /gestion de l'abonnement/.test(x.textContent)); return a ? a.href : null; });
+  check("resilier_sans_telephone", portalLink === "https://billing.stripe.com/p/login/test_fonte", portalLink);
   check("pages_legales_serveur", lg.todo === 0 && lg.txt.includes("Camille Martin") && lg.txt.includes("Médiateur de test") && /connect-src 'self'/.test(hIndex.headers.get("content-security-policy") || "") && /frame-ancestors 'none'/.test(hLegal.headers.get("content-security-policy") || ""), { todo: lg.todo, csp: hIndex.headers.get("content-security-policy") });
 
   // paiement annulé

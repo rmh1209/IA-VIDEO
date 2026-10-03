@@ -62,6 +62,7 @@ shutil.rmtree(os.path.join("server", "public"), ignore_errors=True)
 shutil.copytree(OUT, os.path.join("server", "public"))
 SRV = os.path.join("dist", "fonte-en-ligne")
 shutil.copytree("server", SRV, ignore=shutil.ignore_patterns("node_modules", ".wrangler", ".dev.vars"))
+shutil.copy(os.path.join("docs", "conformite.md"), os.path.join(SRV, "CONFORMITE.md"))
 with zipfile.ZipFile(os.path.join("dist", "fonte-en-ligne.zip"), "w", zipfile.ZIP_DEFLATED) as z:
     for base, _, files in os.walk(SRV):
         for f in files:

@@ -36,7 +36,9 @@
     "EDITEUR_TVA": "",
     "EDITEUR_DIRECTEUR": "",
     "MEDIATEUR_NOM": "",
-    "MEDIATEUR_SITE": ""
+    "MEDIATEUR_SITE": "",
+    // facultatif : lien de connexion au portail client Stripe (Stripe > Paramètres > Portail client > Lien de connexion)
+    "PORTAIL_CONNEXION": ""
   },
   // journaux : seulement les messages d'erreur du serveur, pas le détail de chaque requête (adresse IP, navigateur)
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }

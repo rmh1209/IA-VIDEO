@@ -15,4 +15,13 @@ R.test_sans_mentions_autorise = test.paiement === true && test.legal === false ?
 R.mentions_incompletes = !legalComplete(partial) && legalComplete(ED) ? "OK" : "FAIL";
 const checkoutLive = await handleApi(new Request("https://fonte.example/api/checkout", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://fonte.example" }, body: JSON.stringify({ produit: "fonte", accord: true }) }), { ...base, STRIPE_SECRET_KEY: "sk_live_abc" }, { waitUntil() {} });
 R.paiement_reel_refuse = checkoutLive.status === 503 ? "OK" : "FAIL " + checkoutLive.status;
+// preuve de l'accord enregistrée (appareil, date, version), même si l'appel au modèle échoue ensuite
+const waits = [];
+const coachEnv = { ...base, ...ED, STRIPE_SECRET_KEY: "sk_test_abc", ANTHROPIC_BASE_URL: "http://127.0.0.1:9" };
+const dev = "appareil-preuve-accord-xx";
+const res = await handleApi(new Request("https://fonte.example/api/coach", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://fonte.example" }, body: JSON.stringify({ kind: "coach", device: dev, consentement: 1, messages: [{ role: "user", content: "Bonjour" }] }) }), coachEnv, { waitUntil: p => waits.push(p) });
+await res.text().catch(() => {});
+await Promise.allSettled(waits);
+const proof = kv.get("c:" + dev);
+R.preuve_accord = proof && JSON.parse(proof).v === 1 && JSON.parse(proof).premier ? "OK" : "FAIL " + proof;
 console.log(JSON.stringify(R, null, 1));

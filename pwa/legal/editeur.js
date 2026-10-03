@@ -12,5 +12,6 @@ window.FONTE_EDITEUR = {
   tva: "",           // ex. : TVA non applicable, art. 293 B du CGI (franchise), ou ton numéro de TVA
   directeur: "",     // directeur ou directrice de la publication (souvent toi)
   mediateur: "",     // médiateur de la consommation choisi (obligatoire pour vendre aux particuliers)
-  mediateurSite: ""  // site internet du médiateur
+  mediateurSite: "", // site internet du médiateur
+  portail: ""        // facultatif : lien de connexion au portail client Stripe (résilier sans son téléphone)
 };

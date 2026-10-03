@@ -22,7 +22,7 @@ const ipOf = async request => {
 const today = () => new Date().toISOString().slice(0, 10);
 
 /* éditeur : mentions légales obligatoires pour vendre ; en mode réel, pas de paiement tant qu'elles manquent */
-export const EDITEUR = { nom: "EDITEUR_NOM", statut: "EDITEUR_STATUT", adresse: "EDITEUR_ADRESSE", email: "EDITEUR_EMAIL", telephone: "EDITEUR_TELEPHONE", siret: "EDITEUR_SIRET", rcs: "EDITEUR_RCS", tva: "EDITEUR_TVA", directeur: "EDITEUR_DIRECTEUR", mediateur: "MEDIATEUR_NOM", mediateurSite: "MEDIATEUR_SITE" };
+export const EDITEUR = { nom: "EDITEUR_NOM", statut: "EDITEUR_STATUT", adresse: "EDITEUR_ADRESSE", email: "EDITEUR_EMAIL", telephone: "EDITEUR_TELEPHONE", siret: "EDITEUR_SIRET", rcs: "EDITEUR_RCS", tva: "EDITEUR_TVA", directeur: "EDITEUR_DIRECTEUR", mediateur: "MEDIATEUR_NOM", mediateurSite: "MEDIATEUR_SITE", portail: "PORTAIL_CONNEXION" };
 const REQUIRED = ["nom", "statut", "adresse", "email", "telephone", "siret", "tva", "directeur", "mediateur", "mediateurSite"];
 export const editeurOf = env => Object.fromEntries(Object.entries(EDITEUR).map(([k, v]) => [k, String(env[v] || "").trim()]));
 export const legalComplete = env => { const e = editeurOf(env); return REQUIRED.every(k => e[k]); };
@@ -54,6 +54,7 @@ async function coach(request, env, ctx) {
   const req = validate(body);
   if (body.consentement !== 1) throw new RequestError("consent_required", 400);
   if (!DEVICE.test(String(body.device || ""))) throw bad("identifiant d'appareil");
+  ctx.waitUntil(recordConsent(env, body.device));
   const access = await accessOf(env, body.acces);
   const q = await takeQuota(env, { kind: req.kind, newQuestion: req.newQuestion, device: body.device, ip: await ipOf(request), access });
   if (!q.ok) return fail(q.code, q.status);
@@ -84,6 +85,16 @@ async function coach(request, env, ctx) {
   })();
   ctx.waitUntil(run);
   return new Response(readable, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" } });
+}
+/* preuve de l'accord (RGPD, article 7.1) : appareil, date et version, gardés 6 mois après la dernière question */
+async function recordConsent(env, device) {
+  try {
+    const key = `c:${device}`, prev = await env.QUOTAS.get(key);
+    const rec = prev ? JSON.parse(prev) : { v: 1, premier: new Date().toISOString() };
+    if (prev && Date.now() - Date.parse(rec.dernier || rec.premier) < 864e5) return;
+    rec.dernier = new Date().toISOString();
+    await env.QUOTAS.put(key, JSON.stringify(rec), { expirationTtl: 15552000 });
+  } catch (e) { /* compteur indisponible : sans effet sur la réponse */ }
 }
 async function refund(env, device) {
   try {
@@ -188,7 +199,7 @@ const PAY = { "/api/checkout": checkout, "/api/checkout/confirm": confirm, "/api
 export async function handleApi(request, env, ctx) {
   const path = new URL(request.url).pathname;
   try {
-    if (path === "/api/config") return request.method === "GET" ? json({ coach: coachReady(env), paiement: payReady(env), legal: legalComplete(env), questions: limits(env).freeQuestions }) : fail("method_not_allowed", 405);
+    if (path === "/api/config") return request.method === "GET" ? json({ coach: coachReady(env), paiement: payReady(env), legal: legalComplete(env), questions: limits(env).freeQuestions, portail: /^https:\/\//.test(env.PORTAIL_CONNEXION || "") ? env.PORTAIL_CONNEXION : null }) : fail("method_not_allowed", 405);
     if (!(path === "/api/coach" || PAY[path])) return fail("not_found", 404);
     if (request.method !== "POST") return fail("method_not_allowed", 405);
     // l'API ne sert que l'appli : refuse les requêtes envoyées depuis un autre site

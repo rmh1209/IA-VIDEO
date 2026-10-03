@@ -760,6 +760,10 @@ function premiumStatusHTML(until) {
     <div class="row"><button type="button" class="btn2" data-act="portal">Gérer mon abonnement</button><button type="button" class="btn2 danger" data-act="resilier">Résilier mon abonnement</button></div>
     <p class="muted small">Gérer : changer de carte, voir tes factures. Résilier : sans frais, effet à la fin du mois payé.</p>`;
 }
+function portalLoginHTML() {
+  const u = window.FONTE_PWA && window.FONTE_PWA.payOn() && window.FONTE_PWA.portalLogin();
+  return u ? `<p class="muted small">Abonné·e sur un autre téléphone ? <a href="${esc(u)}" rel="noopener">Gère ou résilie ton abonnement par e-mail</a>.</p>` : "";
+}
 /* tes données : tout est sur ce téléphone ; export (portabilité), sauvegarde, effacement, accord pour le coach */
 function dataHTML() {
   if (!window.FONTE_PWA) return "";
@@ -825,7 +829,7 @@ function renderOffre() {
       ${bundle ? "" : `<p class="muted small">${PRICE.bundle} par mois si tu as débloqué ton programme dans Fonte.</p>`}
       ${pro ? (pay ? premiumStatusHTML(until) : "")
         : `<button type="button" class="unlock" data-act="plan-pro">Passer à Premium (${bundle ? PRICE.bundle : PRICE.premium} / mois)</button><p class="muted small">${pay ? "Sans engagement, résiliable à tout moment en trois clics. Paiement sécurisé avec Stripe." : window.FONTE_PWA ? "Abonnement en ligne bientôt disponible." : "Mode démo : activation sans paiement. En production, ce bouton ouvre la page d'abonnement."}</p>`}</div>
-  </section>${accessHTML()}
+  </section>${portalLoginHTML()}${accessHTML()}
   <section class="card" style="display:grid;gap:10px"><h2>Ton programme Fonte</h2>
     ${P ? `<p><b>${esc(LABEL.goal[st.goal])}</b> · ${esc(LABEL.level[st.level])} · ${P.sessions.length} séances · ${esc(LABEL.eq[st.eq])}${st.pain && st.pain.length ? ` · ménage : ${st.pain.map(z => ZONES[z].toLowerCase()).join(", ")}` : ""}</p><p class="muted small">Importé le ${dateFr(profile.importedAt || Date.now(), { day: "numeric", month: "long", year: "numeric" })}${P.paid ? " · programme débloqué, offre −50 % active" : " · programme gratuit : débloque-le dans Fonte pour obtenir −50 % sur Premium"}.</p>` : `<p class="muted">Tu utilises le programme d'exemple. Importe le tien : dans Fonte, onglet Programme, touche « Ouvrir Fonte Suivi avec mon programme », ou copie le code et colle-le ici.</p>`}
     <label for="code-in" class="small"><b>Code de programme Fonte</b></label><textarea id="code-in" class="code" placeholder="Colle ici le code copié dans Fonte (il commence par F1)"></textarea>

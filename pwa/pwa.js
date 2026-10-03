@@ -18,7 +18,7 @@
   const configReady = !http ? Promise.resolve(config) : Promise.race([
     fetch("api/config", { cache: "no-store" })
       .then(r => (r.ok ? r.json() : { coach: false, paiement: false }))
-      .then(c => { config = { coach: c.coach === true, paiement: c.paiement === true, legal: c.legal !== false }; store.set("fonte.config", JSON.stringify(config)); emit("fonte:config", config); return config; }),
+      .then(c => { config = { coach: c.coach === true, paiement: c.paiement === true, legal: c.legal !== false, portail: typeof c.portail === "string" ? c.portail : null }; store.set("fonte.config", JSON.stringify(config)); emit("fonte:config", config); return config; }),
     new Promise(ok => setTimeout(() => ok(config), cached ? 2500 : 8000))
   ]).catch(() => config);
 
@@ -385,7 +385,8 @@
     premiumUntil: () => { const d = info("premium"); return d && d.exp ? d.exp - 3 * 864e5 : 0; },
     cancelSub, cancelInfo, cancelFlow, checkout, consentInfo, needsConsent, consentHTML, withdrawConsent, exportAll, importAll, eraseAll,
     device, save: o => downloads.save(o),
-    legalOk: () => config.legal !== false
+    legalOk: () => config.legal !== false,
+    portalLogin: () => config.portail || null
   };
 
   // pas de compte Claude ici : coach par le serveur de l'appli, fichiers (PDF, CSV) par le téléchargement du navigateur
