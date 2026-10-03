@@ -39,8 +39,8 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Minuteur de repos qui alerte (son existant + vibration) et rattrape le temps au retour ; écran allumé (existant)
 - [x] Calculateur de disques sur les exercices à la barre (barre de 20, 15 ou 10 kg)
 - [x] Séries d'échauffement conseillées sur le premier gros exercice (barre : 40/60/80 % ; haltères : 50/75 %)
-- [ ] Séances dans l'agenda du téléphone (.ics)
-- [ ] Suivi du poids lissé et ajustement automatique des calories
+- [x] Séances dans l'agenda du téléphone (.ics, rappel 30 min avant)
+- [x] Suivi du poids (tendance sur 3 semaines) et ajustement des calories selon l'objectif, 10 jours d'observation entre deux ajustements
 - [ ] Supersets (plus tard)
 
 ### 4. Livraison
@@ -52,3 +52,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-03 (soir) : conformité RGPD et droit de la consommation dans l'appli et le serveur ; tous les tests au vert (dont 31 vérifications de bout en bout).
 - 2026-10-03 (nuit) : vérifications juridiques (résiliation, RLL, article 50, santé, Anthropic, hébergeur), preuve d'accord, guide mis à jour. Prochaine étape : étude des avis clients des concurrents.
 - 2026-10-03 (nuit) : étude des avis clients (docs/analyse-concurrence.md) ; améliorations retenues listées ci-dessus.
+- 2026-10-04 : agenda .ics, suivi du poids et calories adaptatives, cerveau du coach mis à jour ; 212 vérifications au vert. Reste : supersets, republier les artefacts, livrer.

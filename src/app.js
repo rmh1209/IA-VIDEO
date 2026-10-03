@@ -341,6 +341,8 @@ function renderProgram() {
       <div class="card" style="margin-top:12px"><b>Règle de charge.</b> Double progression : quand tu atteins le haut de la fourchette sur toutes les séries avec une technique propre, ajoute 2,5 à 5 % (≈ 1 à 2,5 kg haut du corps, 2,5 à 5 kg bas du corps). Au poids du corps : plus de répétitions, descente en 3 secondes, puis variante plus dure.</div>
       <div class="card" style="margin-top:12px"><b>Cardio et activité.</b> ${CARDIO[st.goal]}</div></div>${unlocked ? "" : gateMsg("Progression, règle de charge et cardio")}</div></section>
   <section class="coachcta" id="pdf-sec"${downloads === null && runtimeDone ? " hidden" : ""}><p><b>Ton programme en PDF</b><br><span class="muted small">Séances, consignes, progression, nutrition et mobilité, à garder sur ton téléphone.</span></p><button type="button" class="primary" id="pdf-btn" data-act="pdf">${unlocked ? "Télécharger le PDF" : "Débloquer pour télécharger"}</button></section>
+  <section class="coachcta agenda" id="ics-sec"${downloads === null && runtimeDone ? " hidden" : ""}><p><b>Tes séances dans ton agenda</b><br><span class="muted small">Chaque semaine, à tes jours d'entraînement, avec un rappel 30 minutes avant.</span></p>
+    <div class="icsrow"><label for="ics-h" class="small">Heure</label><select id="ics-h">${[6, 7, 8, 9, 12, 13, 17, 18, 19, 20, 21].map(h => `<option value="${h}"${h === 18 ? " selected" : ""}>${h} h</option>`).join("")}</select><button type="button" class="btn2" data-act="ics">Ajouter à mon agenda</button></div></section>
   ${suiviHTML()}`;
   wireVolume();
 }
@@ -395,7 +397,8 @@ function calcNutri() {
     if (bmi >= 25 && !minor) { adj = -clamp(tdee * 0.1, 200, 400); label = "léger déficit"; rate = `Perte douce visée : ${n1(poids * 0.0025)} à ${n1(poids * 0.005)} kg par semaine.`; }
     else { adj = 0; label = "maintien"; rate = "Poids stable : priorité aux habitudes et aux progrès en séance."; }
   }
-  let kcal = tdee + adj, floored = false;
+  const ajust = clamp(+N.ajust || 0, -600, 600);
+  let kcal = tdee + adj + ajust, floored = false;
   const floor = N.sexe === "f" ? 1200 : 1500;
   if (kcal < floor) { kcal = floor; floored = true; }
   const refW = bmi > 30 ? 25 * Math.pow(taille / 100, 2) : poids;
@@ -406,9 +409,75 @@ function calcNutri() {
   if (carbs < 2 * refW) { fat = Math.max(Math.round(0.6 * refW), Math.round(fat - (2 * refW - carbs) * 4 / 9)); carbs = (kcal - prot * 4 - fat * 9) / 4; }
   carbs = Math.max(0, Math.round(carbs / 5) * 5);
   kcal = Math.round(kcal / 10) * 10;
-  return { bmr, tdee, adj, kcal, prot, fat, carbs, bmi, refW, label, rate, floored, minor,
+  return { bmr, tdee, adj, ajust, kcal, prot, fat, carbs, bmi, refW, label, rate, floored, minor,
     water: clamp(poids * 0.035, 1.8, 4), waterTrain: Math.round(minutes / 60 * 0.6 * 10) / 10,
     perMeal: Math.round(prot / 4 / 5) * 5, caf: [Math.round(poids * 3 / 10) * 10, Math.round(poids * 6 / 10) * 10] };
+}
+/* ===== Poids : pesées, tendance sur 3 semaines, ajustement des calories selon l'objectif ===== */
+const dayNum = d => Math.round(Date.parse(d + "T12:00:00Z") / 864e5);
+const todayISO = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`; };
+function weightTrend(log) {
+  const L = (Array.isArray(log) ? log : []).filter(e => e && e.kg > 0 && /^\d{4}-\d\d-\d\d$/.test(e.d)).sort((a, b) => (a.d < b.d ? -1 : 1));
+  if (!L.length) return null;
+  const last = dayNum(L[L.length - 1].d), win = L.filter(e => last - dayNum(e.d) <= 21);
+  const xs = win.map(e => dayNum(e.d) - last), ys = win.map(e => e.kg), span = -Math.min(...xs);
+  const mean = a => a.reduce((t, v) => t + v, 0) / a.length;
+  if (win.length >= 4 && span >= 10) {
+    const mx = mean(xs), my = mean(ys);
+    const slope = xs.reduce((t, x, i) => t + (x - mx) * (ys[i] - my), 0) / xs.reduce((t, x) => t + (x - mx) * (x - mx), 0);
+    return { now: my - slope * mx, rate: slope * 7, span, n: win.length, all: L };
+  }
+  return { now: mean(L.slice(-3).map(e => e.kg)), rate: null, span, n: win.length, all: L };
+}
+/* allure visée en % du poids par semaine, cohérente avec le calcul des calories */
+function targetRate(r) {
+  const st = prof();
+  if (st.goal === "seche") return r.adj < 0 ? [-1, -0.5] : [-0.25, 0.25];
+  if (st.goal === "muscle") return st.level === "deb" ? [0.23, 0.35] : st.level === "inter" ? [0.12, 0.23] : [0.06, 0.12];
+  if (st.goal === "force") return [0, 0.15];
+  return r.adj < 0 ? [-0.5, -0.25] : [-0.15, 0.15];
+}
+function weightAdvice(tr, r) {
+  if (!tr || tr.rate == null) return null;
+  const [lo, hi] = targetRate(r).map(p => p * tr.now / 100);
+  const kcal = d => clamp(Math.round(Math.abs(d) * 1100 / 50) * 50, 100, 300);
+  if (tr.rate < lo) return { delta: kcal(lo - tr.rate), lo, hi };
+  if (tr.rate > hi) return { delta: -kcal(tr.rate - hi), lo, hi };
+  return { delta: 0, lo, hi };
+}
+function weightChart(tr) {
+  const pts = tr.all.filter(e => dayNum(tr.all[tr.all.length - 1].d) - dayNum(e.d) <= 56);
+  if (pts.length < 2) return "";
+  const W = 320, H = 96, P = 8, d0 = dayNum(pts[0].d), d1 = dayNum(pts[pts.length - 1].d) || d0 + 1;
+  const kgs = pts.map(e => e.kg), lo = Math.min(...kgs) - 0.5, hi = Math.max(...kgs) + 0.5;
+  const x = d => P + (dayNum(d) - d0) / Math.max(1, d1 - d0) * (W - 2 * P), y = k => H - P - (k - lo) / (hi - lo) * (H - 2 * P);
+  const line = tr.rate != null ? `<line x1="${x(pts[0].d).toFixed(1)}" y1="${y(tr.now - tr.rate / 7 * (d1 - d0)).toFixed(1)}" x2="${x(pts[pts.length - 1].d).toFixed(1)}" y2="${y(tr.now).toFixed(1)}" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round"/>` : "";
+  return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pesées des 8 dernières semaines : de ${n1(pts[0].kg)} à ${n1(pts[pts.length - 1].kg)} kg">${pts.map(e => `<circle cx="${x(e.d).toFixed(1)}" cy="${y(e.kg).toFixed(1)}" r="3" fill="var(--muted)" opacity=".75"/>`).join("")}${line}</svg>`;
+}
+function weightHTML(r) {
+  const tr = weightTrend(nutri.log), adv = weightAdvice(tr, r), st = prof();
+  const head = `<div class="sechead"><h3>Ton poids, semaine après semaine</h3><span class="muted small">le matin, à jeun</span></div>
+    <form id="poids-form" class="prow"><label for="poids-in" class="sr">Poids de ce matin en kilos</label><input id="poids-in" type="number" inputmode="decimal" min="35" max="250" step="0.1" placeholder="Poids de ce matin (kg)"><button type="submit" class="btn2">Noter</button></form>`;
+  if (!tr) return `<div class="card wcard">${head}<p class="muted small">Pèse-toi 3 matins ou plus par semaine. Après 10 jours, Fonte calcule ta tendance (sans se laisser piéger par l'eau ou le sel) et te dit s'il faut ajuster tes calories.</p></div>`;
+  const pct = tr.rate != null ? tr.rate / tr.now * 100 : null;
+  const rateTxt = tr.rate == null ? `Encore ${tr.n < 4 ? `${4 - tr.n} pesée${4 - tr.n > 1 ? "s" : ""}` : "quelques jours"} pour calculer ta tendance.` : `${tr.rate >= 0 ? "+" : "−"}${n1(Math.abs(tr.rate))} kg par semaine (${pct >= 0 ? "+" : "−"}${n1(Math.abs(pct))} %) sur ${tr.span} jours.`;
+  let verdict = "";
+  const since = nutri.ajustLe ? dayNum(todayISO()) - dayNum(nutri.ajustLe) : 99;
+  if (adv && unlocked && since < 10) {
+    verdict = `<div class="wverdict ok"><p>Ajustement appliqué ${since === 0 ? "aujourd'hui" : `il y a ${since} jour${since > 1 ? "s" : ""}`} : continue tes pesées, Fonte regarde son effet pendant 10 jours avant de te proposer autre chose.</p></div>`;
+  } else if (adv) {
+    const range = `${adv.lo >= 0 ? "+" : "−"}${n1(Math.abs(adv.lo))} à ${adv.hi >= 0 ? "+" : "−"}${n1(Math.abs(adv.hi))} kg par semaine`;
+    const txt = adv.delta === 0 ? `Dans ta cible (${range}) : garde ${n0(r.kcal)} kcal par jour.`
+      : adv.delta > 0 ? `${st.goal === "seche" || st.goal === "forme" ? "Tu perds plus vite que prévu" : "Ton poids monte moins vite que prévu"} (cible : ${range}) : ajoute ${adv.delta} kcal par jour, soit ${n0(r.kcal + adv.delta)} kcal.`
+      : `${st.goal === "seche" || st.goal === "forme" ? "Tu perds moins vite que prévu" : "Ton poids monte plus vite que prévu"} (cible : ${range}) : retire ${-adv.delta} kcal par jour, soit ${n0(r.kcal + adv.delta)} kcal${st.goal === "seche" ? ", ou ajoute 2 000 pas par jour" : ""}.`;
+    verdict = unlocked ? `<div class="wverdict ${adv.delta === 0 ? "ok" : "adj"}"><p>${esc(txt)}</p>${adv.delta ? `<button type="button" class="primary" data-act="poids-apply" data-k="${adv.delta}">Appliquer (${adv.delta > 0 ? "+" : "−"}${Math.abs(adv.delta)} kcal)</button>` : ""}</div>`
+      : `<p class="note">Ajustement automatique de tes calories d'après ta tendance : inclus dans la version complète.</p>`;
+  }
+  const maj = Math.abs(tr.now - +nutri.poids) >= 1 ? `<button type="button" class="linkbtn" data-act="poids-maj">Mettre ton profil à ${n1(tr.now)} kg</button>` : "";
+  return `<div class="card wcard">${head}${weightChart(tr)}
+    <p>Tendance : <b>${n1(tr.now)} kg</b> · ${esc(rateTxt)} ${maj}</p>${verdict}
+    ${nutri.ajust ? `<p class="muted small">Ajustement déjà appliqué d'après tes pesées : ${nutri.ajust > 0 ? "+" : "−"}${Math.abs(nutri.ajust)} kcal. <button type="button" class="linkbtn" data-act="poids-reset">Revenir au calcul de base</button></p>` : ""}
+    <details><summary>Mes pesées (${tr.all.length})</summary><ul class="wlist">${tr.all.slice(-14).reverse().map(e => `<li><span>${new Date(e.d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span><b>${n1(e.kg)} kg</b><button type="button" class="linkbtn" data-act="poids-del" data-d="${e.d}" aria-label="Supprimer la pesée du ${e.d}">Supprimer</button></li>`).join("")}</ul></details></div>`;
 }
 function adjTxt(r) { return r.adj === 0 ? "maintien" : `${r.adj > 0 ? "+" : "−"}${n0(Math.abs(r.adj))} kcal (${r.label})`; }
 function tile(label, key, val, sub) {
@@ -454,7 +523,8 @@ function renderNutriOut() {
   const src = SOURCES[nutri.reg] || SOURCES.omni;
   O.innerHTML = `
     <div class="hero"><span class="muted small">Ton objectif calorique</span><div class="big">${n0(r.kcal)} <small>kcal par jour</small></div>
-      <p class="muted">Dépense estimée ${n0(r.tdee)} kcal, dont ${n0(r.bmr)} kcal de métabolisme de base · ${adjTxt(r)}. ${esc(r.rate)}</p></div>
+      <p class="muted">Dépense estimée ${n0(r.tdee)} kcal, dont ${n0(r.bmr)} kcal de métabolisme de base · ${adjTxt(r)}${r.ajust ? ` · ajusté d'après tes pesées : ${r.ajust > 0 ? "+" : "−"}${Math.abs(r.ajust)} kcal` : ""}. ${esc(r.rate)}</p></div>
+    ${weightHTML(r)}
     <div class="tiles">
       ${tile("Protéines", "--c-prot", `${r.prot} g`, `${n1(r.prot / w)} g/kg · ≈ ${r.perMeal} g par repas`)}
       ${tile("Lipides", "--c-lip", `${r.fat} g`, `${n1(r.fat / w)} g/kg`)}
@@ -485,7 +555,28 @@ $("#panel-nutri").addEventListener("input", e => {
   nutri.example = false;
   renderNutriOut(); save();
 });
+$("#panel-nutri").addEventListener("submit", e => {
+  if (e.target.id !== "poids-form") return;
+  e.preventDefault();
+  const kg = clampNum($("#poids-in").value, 35, 250);
+  if (kg == null) { toast("Indique un poids entre 35 et 250 kg."); return; }
+  const d = todayISO(), log = (Array.isArray(nutri.log) ? nutri.log : []).filter(x => x.d !== d);
+  log.push({ d, kg: Math.round(kg * 10) / 10 });
+  nutri.log = log.sort((a, b) => (a.d < b.d ? -1 : 1)).slice(-400);
+  renderNutriOut(); save();
+  toast(`Pesée notée : ${n1(kg)} kg.`);
+});
 $("#panel-nutri").addEventListener("click", e => {
+  const a = e.target.closest("[data-act^='poids-']");
+  if (a) {
+    const act = a.dataset.act;
+    if (act === "poids-del") nutri.log = (nutri.log || []).filter(x => x.d !== a.dataset.d);
+    else if (act === "poids-apply") { nutri.ajust = clamp((+nutri.ajust || 0) + (+a.dataset.k || 0), -600, 600); nutri.ajustLe = todayISO(); toast(`Calories ajustées : ${n0(calcNutri().kcal)} kcal par jour.`); }
+    else if (act === "poids-reset") { nutri.ajust = 0; nutri.ajustLe = null; }
+    else if (act === "poids-maj") { const tr = weightTrend(nutri.log); if (tr) { nutri.poids = Math.round(tr.now * 10) / 10; nutri.example = false; renderNutri(); save(); return; } }
+    renderNutriOut(); save();
+    return;
+  }
   const b = e.target.closest("[data-nk] button[data-v]");
   if (!b) return;
   const grp = b.closest("[data-nk]"), nk = grp.dataset.nk;
@@ -581,6 +672,7 @@ $("#result").addEventListener("click", e => {
   else if (act === "combler") coachAsk("Mon volume est sous la cible pour certains muscles. Ajoute ce qu'il faut (2 à 3 séries d'isolation au bon endroit) sans dépasser ma durée de séance, et explique ton choix.", { display: "Comble les muscles sous la cible" });
   else if (act === "mealplan") coachAsk("Crée-moi une journée type de repas qui respecte mes calories et mes protéines (onglet Nutrition), avec des aliments simples du quotidien et les quantités. Donne un tableau : repas, aliments et quantités, protéines, kcal. Ajoute une variante rapide pour les jours chargés.", { display: "Crée-moi une journée type de repas" });
   else if (act === "pdf") exportPDF();
+  else if (act === "ics") exportICS();
   else if (act === "copycode") copyCode();
   else if (act === "breath") toggleBreath();
   else if (act === "edit") { $("#f").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth" }); $("#f button[aria-pressed='true']").focus({ preventScroll: true }); }
@@ -608,7 +700,7 @@ async function initRuntime() {
   coachState = "ready";
   renderCoachShell();
 }
-function updatePdf() { const sec = $("#pdf-sec"); if (sec) sec.hidden = runtimeDone && !downloads; }
+function updatePdf() { ["#pdf-sec", "#ics-sec"].forEach(id => { const sec = $(id); if (sec) sec.hidden = runtimeDone && !downloads; }); }
 
 function renderCoachShell() {
   const off = $("#coach-off"), form = $("#coach-form"), sugg = $("#coach-sugg"), status = $("#coach-status");
@@ -734,6 +826,8 @@ function contexte() {
     const r = calcNutri();
     L.push(`Nutrition : ${nutri.sexe === "f" ? "femme" : "homme"}, ${nutri.age} ans, ${nutri.taille} cm, ${nutri.poids} kg, activité ${ACT[nutri.act].l.toLowerCase()}, alimentation ${REG[nutri.reg].toLowerCase()} → métabolisme de base ${n0(r.bmr)} kcal, dépense ~${n0(r.tdee)} kcal, cible ${n0(r.kcal)} kcal (${adjTxt(r)}) ; protéines ${r.prot} g, lipides ${r.fat} g, glucides ${r.carbs} g ; eau ${n1(r.water)} L (+${n1(r.waterTrain)} L par séance) ; IMC ${n1(r.bmi)}`);
   }
+  const tr = weightTrend(nutri.log);
+  if (tr) L.push(`Pesées : ${tr.all.length} ; tendance ${n1(tr.now)} kg${tr.rate != null ? `, ${tr.rate >= 0 ? "+" : "−"}${n1(Math.abs(tr.rate))} kg par semaine sur ${tr.span} jours` : ""}${nutri.ajust ? ` ; calories déjà ajustées de ${nutri.ajust > 0 ? "+" : ""}${nutri.ajust} kcal d'après les pesées` : ""}`);
   L.push(`Modifications déjà faites : ${edits.length ? edits.slice(-12).join(" ; ") : "aucune"}`);
   return L.join("\n");
 }
@@ -1041,6 +1135,46 @@ $("#coach-input").addEventListener("keydown", e => {
 });
 $("#coach-stop").addEventListener("click", () => { if (ctl) ctl.abort(); });
 $("#coach-reset").addEventListener("click", () => { if (busy && ctl) ctl.abort(); chat = []; renderLog(); renderSugg(); save(); $("#coach-input").focus(); });
+
+/* ===== Agenda : fichier .ics, une séance par semaine et par jour d'entraînement ===== */
+const BYDAY = { Lun: "MO", Mar: "TU", Mer: "WE", Jeu: "TH", Ven: "FR", Sam: "SA", Dim: "SU" };
+const JS_DAY = { Dim: 0, Lun: 1, Mar: 2, Mer: 3, Jeu: 4, Ven: 5, Sam: 6 };
+const icsText = v => String(v).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+function icsFold(line) {
+  const out = [];
+  let cur = "", size = 0;
+  for (const ch of line) {
+    const n = new TextEncoder().encode(ch).length;
+    if (size + n > 73) { out.push(cur); cur = " "; size = 1; }
+    cur += ch; size += n;
+  }
+  out.push(cur);
+  return out.join("\r\n");
+}
+function buildICS(hour) {
+  const st = prof(), pad = n => String(n).padStart(2, "0"), now = new Date();
+  const stamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}00Z`;
+  const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Fonte//Programme//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Fonte"];
+  plan.sessions.forEach((s, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + ((JS_DAY[s.day] - d.getDay() + 7) % 7 || (now.getHours() >= hour ? 7 : 0)));
+    const start = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(hour)}0000`;
+    const details = unlocked || i === 0 ? s.ex.map(x => `${x.n} : ${doseTxt(x)}`).join("\n") : "Détail des exercices dans la version complète.";
+    L.push("BEGIN:VEVENT", `UID:fonte-${i}-${stamp}@fonte`, `DTSTAMP:${stamp}`, `DTSTART:${start}`, `DURATION:PT${MINUTES[st.time] || 45}M`, `RRULE:FREQ=WEEKLY;BYDAY=${BYDAY[s.day]}`,
+      `SUMMARY:${icsText(`Fonte · Séance ${i + 1} : ${s.name}`)}`, `DESCRIPTION:${icsText(`${details}\n\nOuvre Fonte pour démarrer ta séance.`)}`,
+      "BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:-PT30M", `DESCRIPTION:${icsText(`Séance ${i + 1} dans 30 minutes`)}`, "END:VALARM", "END:VEVENT");
+  });
+  L.push("END:VCALENDAR");
+  return L.map(icsFold).join("\r\n") + "\r\n";
+}
+async function exportICS() {
+  if (!downloads) { toast("Le téléchargement n'est pas disponible dans cette vue."); return; }
+  const hour = +($("#ics-h") ? $("#ics-h").value : 18) || 18;
+  try {
+    const res = await downloads.save({ filename: "seances-fonte.ics", data: new Blob([buildICS(hour)], { type: "text/calendar;charset=utf-8" }) });
+    if (res && res.status === "saved") toast("Fichier agenda enregistré : ouvre-le pour ajouter tes séances.");
+  } catch (e) { if (!(e && e.code === "declined")) toast("Le fichier agenda n'a pas pu être créé."); }
+}
 
 /* ===== Export PDF ===== */
 const JSPDF_URL = window.FONTE_PWA ? "vendor/jspdf.umd.min.js" : "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
