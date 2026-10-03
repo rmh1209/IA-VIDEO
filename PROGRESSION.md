@@ -43,7 +43,13 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Suivi du poids (tendance sur 3 semaines) et ajustement des calories selon l'objectif, 10 jours d'observation entre deux ajustements
 - [x] Supersets et séries géantes (liaison, enchaînement sans repos, mémorisés par séance, repère dans l'historique)
 
-### 4. Livraison
+### 4. Deuxième vague
+- [x] Import de l'historique Strong et Hevy (CSV) : exercices reconnus en anglais ou en français, kilos ou livres, sans doublon, records recalculés
+- [ ] Varier les exercices accessoires à chaque nouveau cycle (contre la monotonie reprochée à Fitbod)
+- [ ] Carte de progrès à partager (image) depuis la fin de séance et les paliers
+- [ ] Page de présentation (arguments tirés de l'étude, prix, questions fréquentes)
+
+### 5. Livraison
 - [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
 
 ## Journal
@@ -54,3 +60,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-03 (nuit) : étude des avis clients (docs/analyse-concurrence.md) ; améliorations retenues listées ci-dessus.
 - 2026-10-04 : agenda .ics, suivi du poids et calories adaptatives, cerveau du coach mis à jour ; 212 vérifications au vert. Reste : supersets, republier les artefacts, livrer.
 - 2026-10-04 : supersets dans le carnet ; cerveau du coach mis à jour.
+- 2026-10-04 : import Strong / Hevy ; test du carnet rendu robuste (attentes sur l'état au lieu de délais fixes).

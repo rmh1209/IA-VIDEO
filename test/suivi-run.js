@@ -144,6 +144,7 @@ function code(obj) { return "F1" + Buffer.from(JSON.stringify(obj), "utf8").toSt
   // Persistance (rechargement)
   await page.reload();
   await page.waitForSelector("[data-act=start]");
+  await page.waitForFunction(() => workouts.length === 2 && profile.plan === "premium", null, { timeout: 8000 }).catch(() => {});
   const re = await page.evaluate(() => ({ w: workouts.length, plan: profile.plan }));
   check("persistance_db", re.w === 2 && re.plan === "premium", re);
 
@@ -180,7 +181,7 @@ function code(obj) { return "F1" + Buffer.from(JSON.stringify(obj), "utf8").toSt
   await page.click('#ex-0 .srow[data-j="0"] .chk');
   await page.click("[data-act=finish]");
   await page.click("[data-act=save-workout]");
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => storeMode === "local" && workouts.length === 3 && (JSON.parse(localStorage.getItem("fonte-suivi.v1") || "{}").workouts || []).length === 3, null, { timeout: 8000 }).catch(() => {});
   const fb = await page.evaluate(() => ({ mode: storeMode, w: workouts.length, local: JSON.parse(localStorage.getItem("fonte-suivi.v1") || "{}").workouts?.length }));
   check("secours_appareil", fb.mode === "local" && fb.w === 3 && fb.local === 3, fb);
 

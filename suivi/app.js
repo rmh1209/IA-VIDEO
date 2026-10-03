@@ -953,7 +953,8 @@ function renderOffre() {
     <label for="code-in" class="small"><b>Code de programme Fonte</b></label><textarea id="code-in" class="code" placeholder="Colle ici le code copié dans Fonte (il commence par F1)"></textarea>
     <div class="row"><button type="button" class="primary" data-act="import-code">Importer</button><a href="${FONTE_URL}"${window.FONTE_PWA ? "" : ' target="_blank" rel="noopener"'}>Ouvrir Fonte</a></div></section>
   <section class="card" style="display:grid;gap:10px"><h2>Tes données</h2><p class="muted small">${storeMode === "db" ? "Tes séances sont enregistrées sur ton compte et synchronisées entre tes appareils. Elles ne sont visibles que par toi." : "Tes séances sont enregistrées sur cet appareil."} ${workouts.length} séance${workouts.length > 1 ? "s" : ""} enregistrée${workouts.length > 1 ? "s" : ""}.</p>
-    <div class="row"><button type="button" class="btn2" data-act="csv" id="csv-btn"${runtimeDone && !downloads ? " hidden" : ""}>Exporter mes séances (CSV)</button><button type="button" class="btn2" data-act="wipe">Effacer mes séances</button></div>${dataHTML()}</section>`;
+    <div class="row"><button type="button" class="btn2" data-act="csv" id="csv-btn"${runtimeDone && !downloads ? " hidden" : ""}>Exporter mes séances (CSV)</button><button type="button" class="btn2" data-act="wipe">Effacer mes séances</button></div>
+    <div class="row"><label class="btn2 filebtn">Importer depuis Strong ou Hevy<input type="file" accept=".csv,text/csv" id="import-csv" hidden></label><span class="muted small">Ton historique te suit : exporte-le en CSV depuis l'autre appli.</span></div>${dataHTML()}</section>`;
 }
 
 /* ===== Analyse du coach (IA) ===== */
