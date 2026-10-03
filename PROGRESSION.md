@@ -33,10 +33,15 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Plus de déblocage « démo » dans l'appli installée quand le paiement n'est pas branché
 
 ### 2. Étude des avis clients des meilleures applis
-- [ ] Hevy, Strong, Fitbod, JEFIT, Freeletics, Alpha Progression, MacroFactor, Boostcamp… → `docs/analyse-concurrence.md`
+- [x] Hevy, Strong, Fitbod, JEFIT, Freeletics, MacroFactor… → `docs/analyse-concurrence.md`
 
-### 3. Améliorations tirées de l'étude (à confirmer par l'étude)
-- [ ] À définir après l'étude
+### 3. Améliorations tirées de l'étude
+- [ ] Minuteur de repos qui alerte (vibration, son) et écran qui reste allumé pendant la séance
+- [ ] Calculateur de disques sur les exercices à la barre
+- [ ] Séries d'échauffement conseillées sur le premier gros exercice
+- [ ] Séances dans l'agenda du téléphone (.ics)
+- [ ] Suivi du poids lissé et ajustement automatique des calories
+- [ ] Supersets (plus tard)
 
 ### 4. Livraison
 - [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
@@ -46,3 +51,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-03 : projet versionné sur la branche `claude/fonte-app` (dépôt IA-VIDEO, branche dédiée sans lien avec hoopcut).
 - 2026-10-03 (soir) : conformité RGPD et droit de la consommation dans l'appli et le serveur ; tous les tests au vert (dont 31 vérifications de bout en bout).
 - 2026-10-03 (nuit) : vérifications juridiques (résiliation, RLL, article 50, santé, Anthropic, hébergeur), preuve d'accord, guide mis à jour. Prochaine étape : étude des avis clients des concurrents.
+- 2026-10-03 (nuit) : étude des avis clients (docs/analyse-concurrence.md) ; améliorations retenues listées ci-dessus.
