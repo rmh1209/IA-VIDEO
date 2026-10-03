@@ -49,7 +49,14 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Carte de séance à partager (image 1080 × 1350 générée sur le téléphone, partage natif ou enregistrement), depuis la fin de séance et l'historique
 - [x] Page de présentation decouvrir.html (arguments tirés de l'étude, prix, questions fréquentes, données structurées pour les moteurs de recherche)
 
-### 5. Livraison
+### 5. Troisième vague
+- [ ] Bilan du mois automatique dans Progrès (séances, volume, records, palier gagné), partageable
+- [ ] Mensurations (tour de taille) à côté du suivi du poids
+- [ ] Accessibilité : revue clavier, contrastes, libellés des boutons
+- [ ] Rappels de séance par notification (Web Push, serveur) : à évaluer
+- [ ] Version anglaise : à évaluer
+
+### 6. Livraison
 - [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
 
 ## Journal
