@@ -564,7 +564,7 @@ function finishWorkout() {
     ${xp.html}
     ${w.prs.length ? `<div class="card"><h3>${w.prs.length} record${w.prs.length > 1 ? "s" : ""} battu${w.prs.length > 1 ? "s" : ""}</h3><ul style="margin:6px 0 0;padding-left:20px">${w.prs.map(p => `<li><b>${esc(p.n)}</b> : force estimée ${f1(p.e)} kg (${f1(p.w)} kg × ${p.r})</li>`).join("")}</ul></div>` : `<p class="muted">Pas de record aujourd'hui : la régularité fait le travail.</p>`}
     ${totalCount() > doneCount() ? `<p class="muted small">${totalCount() - doneCount()} série(s) non validée(s) ne seront pas enregistrées.</p>` : ""}
-    <div class="row"><button type="button" class="btn2" data-act="sheet-close">Continuer la séance</button><span class="sp"></span><button type="button" class="primary" data-act="save-workout">Enregistrer la séance</button></div>`);
+    <div class="row"><button type="button" class="btn2" data-act="sheet-close">Continuer la séance</button><button type="button" class="btn2" data-act="share-w">Partager</button><span class="sp"></span><button type="button" class="primary" data-act="save-workout">Enregistrer la séance</button></div>`);
   pendingSave = w;
 }
 let pendingSave = null, pendingGain = null;
@@ -748,7 +748,7 @@ function detailHTML(w) {
   return `<section><button type="button" class="linkbtn" data-act="back">← Historique</button><h1>${esc(w.name)}</h1><p class="muted">${dateFr(w.startedAt, { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · ${mmss(w.dur)} · ${w.nsets} séries · ${f0(w.vol)} kg${w.demo ? " · exemple" : ""}</p></section>
     ${w.prs && w.prs.length ? `<section class="card"><h3>Records</h3><ul style="margin:6px 0 0;padding-left:20px">${w.prs.map(p => `<li><b>${esc(p.n)}</b> : ${f1(p.e)} kg estimés (${f1(p.w)} kg × ${p.r})</li>`).join("")}</ul></section>` : ""}
     <section class="card">${w.ex.map(x => `<div class="detail-ex"><b>${esc(x.n)}</b><ol>${x.sets.map(s => `<li>${s.w ? f1(s.w) + " kg × " : ""}${s.r ?? "—"}</li>`).join("")}</ol>${x.note ? `<p class="muted small">Note : ${esc(x.note)}</p>` : ""}</div>`).join("")}</section>
-    ${w.demo ? "" : `<section class="row"><button type="button" class="primary" data-act="redo" data-id="${esc(w.id)}">Refaire cette séance</button><span class="sp"></span><button type="button" class="btn2" data-act="delete-w" data-id="${esc(w.id)}">Supprimer</button></section>`}`;
+    ${w.demo ? "" : `<section class="row"><button type="button" class="primary" data-act="redo" data-id="${esc(w.id)}">Refaire cette séance</button><button type="button" class="btn2" data-act="share-w" data-id="${esc(w.id)}">Partager</button><span class="sp"></span><button type="button" class="btn2" data-act="delete-w" data-id="${esc(w.id)}">Supprimer</button></section>`}`;
 }
 function demoBanner() { return `<div class="banner"><b>Exemple</b><p>Ces séances sont fictives et ne sont pas enregistrées. Tes vraies séances les remplaceront.</p><div class="row"><button type="button" class="btn2" data-act="demo-off">Masquer l'exemple</button></div></div>`; }
 
