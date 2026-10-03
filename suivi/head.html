@@ -184,6 +184,14 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 a.btn2{display:inline-flex;align-items:center;color:var(--ink);text-decoration:none}
 .restore{display:grid;gap:8px}
 .datatools{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.recap{display:grid;gap:10px}
+.recap .sechead .row{gap:6px}
+.recap-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.recap-grid .stat{display:grid;gap:2px;align-content:start}
+.recap-grid b{font-size:1.4rem;white-space:nowrap}
+.recap-grid em{font-style:normal;font-size:12.5px;color:var(--muted)}
+.recap-grid em.up{color:var(--green)}
+.recap p{margin:0}
 .exc.ss{border-left:4px solid var(--blue);padding-left:14px}
 .ssbadge{margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--blue)}
 .plates{margin:4px 0 0;font-size:14px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline}
@@ -259,6 +267,8 @@ textarea.code{width:100%;min-height:84px;border:1.5px solid var(--line);border-r
 .tierpill.gold{border-color:var(--yellow)}
 .tierpill+.plan{margin-left:0}
 @media (max-width:359px){.tierpill{display:none}.plan{margin-left:auto}}
+.tierpill{min-width:0;max-width:42vw;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:429px){.brand span{display:none}}
 .tbar{display:block;width:100%;max-width:340px;height:auto;margin:2px auto 0}
 .tbar .tb-rod{fill:var(--muted);opacity:.5}
 .tbar .tb-col{fill:var(--muted)}

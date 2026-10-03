@@ -50,7 +50,7 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Page de présentation decouvrir.html (arguments tirés de l'étude, prix, questions fréquentes, données structurées pour les moteurs de recherche)
 
 ### 5. Troisième vague
-- [ ] Bilan du mois automatique dans Progrès (séances, volume, records, palier gagné), partageable
+- [x] Bilan du mois automatique dans Progrès (séances et volume comparés au mois précédent, points gagnés, plus forte progression, records, navigation par mois)
 - [ ] Mensurations (tour de taille) à côté du suivi du poids
 - [ ] Accessibilité : revue clavier, contrastes, libellés des boutons
 - [ ] Rappels de séance par notification (Web Push, serveur) : à évaluer
@@ -71,3 +71,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-04 : exercices accessoires renouvelés à chaque cycle ; le Programme suit le carnet même au niveau confirmé.
 - 2026-10-04 : carte de séance à partager.
 - 2026-10-04 : page de présentation ; deuxième vague terminée.
+- 2026-10-04 : bilan du mois ; en-tête du carnet corrigé sur les petits écrans (débordement avec Premium et un palier long).

@@ -813,6 +813,34 @@ function exSeries(list, key) {
 }
 
 /* ===== Progrès ===== */
+/* ===== Bilan du mois : séances, volume, points gagnés, plus forte progression, records ===== */
+let recapOffset = 0;
+function monthBounds(off) { const d = new Date(); return [new Date(d.getFullYear(), d.getMonth() - off, 1).getTime(), new Date(d.getFullYear(), d.getMonth() - off + 1, 1).getTime()]; }
+function monthStats(list, off) {
+  const [a, b] = monthBounds(off), ws = list.filter(w => w.startedAt >= a && w.startedAt < b), before = list.filter(w => w.startedAt < a);
+  const bestOf = (arr, k) => Math.max(0, ...arr.map(w => { const x = w.ex.find(y => keyOf(y) === k), bs = x && bestSet(x.sets); return bs ? bs.e : 0; }));
+  let top = null;
+  for (const k of new Set(ws.flatMap(w => w.ex.map(keyOf)))) {
+    const bm = bestOf(ws, k), bb = bestOf(before, k);
+    if (bb > 0 && bm > bb && (!top || (bm - bb) / bb > top.gain)) top = { n: (ws.flatMap(w => w.ex).find(x => keyOf(x) === k) || {}).n, gain: (bm - bb) / bb, from: bb, to: bm };
+  }
+  let pts = 0;
+  try { pts = ptsNow(list.filter(w => w.startedAt < b)).total - ptsNow(before).total; } catch (e) { pts = 0; }
+  return { a, n: ws.length, vol: ws.reduce((t, w) => t + (w.vol || volOf(w)), 0), prs: ws.flatMap(w => w.prs || []), top, pts };
+}
+function recapHTML(list) {
+  const cur = monthStats(list, recapOffset), prev = monthStats(list, recapOffset + 1);
+  const name = new Date(cur.a).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const volTxt = v => (v >= 10000 ? `${f1(v / 1000)} t` : `${f0(v)} kg`);
+  const delta = (x, y, fmt) => (y ? `<em class="${x >= y ? "up" : "down"}">${x >= y ? "+" : "−"}${fmt(Math.abs(x - y))} sur un mois</em>` : "");
+  const oldest = list.length ? Math.min(...list.map(w => w.startedAt)) : Date.now();
+  const de = /^[aeiouyàâéèêîôû]/i.test(name) ? "d'" : "de ";
+  return `<section class="card recap"><div class="sechead"><h2>Bilan ${de}${esc(name)}</h2><div class="row"><button type="button" class="iconbtn" data-act="recap-prev"${cur.a > oldest ? "" : " disabled"} aria-label="Mois précédent">‹</button><button type="button" class="iconbtn" data-act="recap-next"${recapOffset ? "" : " disabled"} aria-label="Mois suivant">›</button></div></div>
+    ${cur.n ? `<div class="recap-grid"><div class="stat"><span>Séances</span><b>${cur.n}</b>${delta(cur.n, prev.n, f0)}</div><div class="stat"><span>Volume soulevé</span><b>${volTxt(cur.vol)}</b>${delta(cur.vol, prev.vol, volTxt)}</div><div class="stat"><span>Points gagnés</span><b>+${f0(cur.pts)}</b></div></div>
+    ${cur.top ? `<p><b>Plus forte progression</b> : ${esc(cur.top.n)}, force estimée ${f1(cur.top.from)} → ${f1(cur.top.to)} kg (+${f0(cur.top.gain * 100)} %).</p>` : ""}
+    ${cur.prs.length ? `<p><b>${cur.prs.length} record${cur.prs.length > 1 ? "s" : ""}</b> : ${esc([...new Set(cur.prs.map(p => p.n))].slice(0, 3).join(", "))}${new Set(cur.prs.map(p => p.n)).size > 3 ? "…" : ""}.</p>` : ""}`
+    : `<p class="muted">Aucune séance enregistrée en ${esc(name.split(" ")[0])}.</p>`}</section>`;
+}
 function renderProgress() {
   const V = $("#v-progres");
   const real = workouts.length > 0, list = real ? workouts : demo;
@@ -833,7 +861,7 @@ function renderProgress() {
   const vmax = Math.max(hi + 4, ...mkeys.map(k => mv[k]));
   const sc = v => v / vmax * 100;
   V.innerHTML = `<section><h1>Progrès</h1>${!real ? demoBanner() : ""}</section>
-  ${tiersCardHTML(list)}${stageCardHTML(list, real)}
+  ${tiersCardHTML(list)}${stageCardHTML(list, real)}${recapHTML(list)}
   <section class="stats"><div class="stat"><span>Séances ce mois</span><b>${month.length}</b></div><div class="stat"><span>Records ce mois</span><b>${month.reduce((t, w) => t + (w.prs ? w.prs.length : 0), 0)}</b></div><div class="stat"><span>Série en cours</span><b>${streak(list, target)} sem.</b></div></section>
   <section class="card"><div class="sechead"><h2>Régularité</h2><span class="muted small">séances par semaine</span></div><div class="chart" id="ch-weeks"></div>
     <details><summary>Voir les données</summary><div class="tbl"><table><thead><tr><th>Semaine</th><th class="n">Séances</th></tr></thead><tbody>${bars.map(b => `<tr><td>${esc(b.label)}</td><td class="n">${b.v}</td></tr>`).join("")}</tbody></table></div></details></section>
@@ -1095,6 +1123,8 @@ document.addEventListener("click", e => {
     case "go-offre": setView("offre"); window.scrollTo(0, 0); break;
     case "go-seance": setView("seance"); break;
     case "go-progres": setView("progres"); window.scrollTo(0, 0); break;
+    case "recap-prev": recapOffset++; renderProgress(); break;
+    case "recap-next": recapOffset = Math.max(0, recapOffset - 1); renderProgress(); break;
     case "stage-next": nextStage(); break;
     case "open-w": detailId = b.dataset.id; renderHistory(); window.scrollTo(0, 0); break;
     case "back": detailId = null; renderHistory(); break;
