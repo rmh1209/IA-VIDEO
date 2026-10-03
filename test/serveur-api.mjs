@@ -9,12 +9,17 @@ const TOOLS = [
   { name: "chercher_exercices", description: "Cherche dans la base.", input_schema: { type: "object", properties: { texte: { type: "string" } } } },
   { name: "remplacer_exercice", description: "Remplace un exercice.", input_schema: { type: "object", properties: { ancien: { type: "string" }, nouveau: { type: "string" }, seance: { type: "integer" } }, required: ["ancien", "nouveau"] } }
 ];
-const q = (text, extra = {}) => ({ kind: "coach", device: dev(extra.d || 1), tools: TOOLS, messages: [{ role: "user", content: [{ type: "text", text: CTX }, { type: "text", text }] }], ...extra });
+const q = (text, extra = {}) => ({ kind: "coach", device: dev(extra.d || 1), consentement: 1, tools: TOOLS, messages: [{ role: "user", content: [{ type: "text", text: CTX }, { type: "text", text }] }], ...extra });
 
 const stack = await startStack();
 try {
   const cfg = await (await fetch(BASE + "/api/config")).json();
-  check("config", cfg.coach === true && cfg.paiement === true && cfg.questions === 3, cfg);
+  check("config", cfg.coach === true && cfg.paiement === true && cfg.legal === true && cfg.questions === 3, cfg);
+  // sans l'accord explicite de la personne, rien ne part vers Claude
+  const nc = stack.mocks.state.claude.length, noConsent = await ask({ ...q("Bonjour"), consentement: undefined });
+  check("accord_exige", noConsent.status === 400 && noConsent.json.error === "consent_required" && stack.mocks.state.claude.length === nc, noConsent);
+  const ed = await (await fetch(BASE + "/legal/editeur.js")).text();
+  check("editeur_depuis_config", ed.includes("Camille Martin") && ed.includes("Médiateur de test"), ed.slice(0, 120));
 
   // question simple : texte au fil de l'eau, réponse complète renvoyée, paramètres envoyés à Claude
   const a = await ask(q("Bonjour coach", { d: 1 }));
@@ -32,13 +37,13 @@ try {
   const t1 = await ask(q("Remplace le goblet squat", { d: 2 }));
   const use1 = t1.done.m.content.find(c => c.type === "tool_use");
   const m1 = [...q("").messages.slice(0, 0), { role: "user", content: [{ type: "text", text: CTX }, { type: "text", text: "Remplace le goblet squat" }] }, { role: "assistant", content: t1.done.m.content }, { role: "user", content: [{ type: "tool_result", tool_use_id: use1.id, content: JSON.stringify([{ nom: "Presse à cuisses" }]) }] }];
-  const t2 = await ask({ kind: "coach", device: dev(2), tools: TOOLS, messages: m1 });
+  const t2 = await ask({ kind: "coach", device: dev(2), consentement: 1, tools: TOOLS, messages: m1 });
   const use2 = t2.done && t2.done.m.content.find(c => c.type === "tool_use");
   const echoed = stack.mocks.state.claude.at(-1).body.messages[1].content;
   check("outils_tour1", use1 && use1.name === "chercher_exercices" && use1.input.texte === "pectoraux" && t1.done.m.stop_reason === "tool_use" && t1.done.left === 2, t1.done);
   check("outils_tour2_reprise", use2 && use2.name === "remplacer_exercice" && use2.input.ancien === "Goblet squat" && t2.done.left === undefined && echoed[0].type === "thinking" && echoed[0].signature === "sig_t1", { t2: t2.done, echoed });
   const m2 = [...m1, { role: "assistant", content: t2.done.m.content }, { role: "user", content: [{ type: "tool_result", tool_use_id: use2.id, content: "{\"ok\":true}" }] }];
-  const t3 = await ask({ kind: "coach", device: dev(2), tools: TOOLS, messages: m2 });
+  const t3 = await ask({ kind: "coach", device: dev(2), consentement: 1, tools: TOOLS, messages: m2 });
   check("outils_tour3_final", t3.text.includes("presse à cuisses") && t3.done.m.stop_reason === "end_turn", t3);
 
   // entrée d'outil illisible : le tour est relancé et l'appli efface le texte du premier essai
@@ -79,12 +84,14 @@ try {
     [img.status, orphan.status, badTool.status, cc.status, noDev.status, xsite.status, get.status, huge.status]);
 
   // analyse du carnet : réservée à Premium
-  const ana = { kind: "analyse", device: dev(11), messages: [{ role: "user", content: "=== MISSION DANS FONTE SUIVI ===\nanalyse\n=== SES SÉANCES (8 dernières semaines) ===\n..." }] };
+  const ana = { kind: "analyse", device: dev(11), consentement: 1, messages: [{ role: "user", content: "=== MISSION DANS FONTE SUIVI ===\nanalyse\n=== SES SÉANCES (8 dernières semaines) ===\n..." }] };
   const a0 = await ask(ana);
   check("analyse_premium_requis", a0.status === 402 && a0.json.error === "premium_required", a0);
 
   // achat du programme (19 €) : Checkout, page Stripe, retour, jeton
-  const co = await post("/api/checkout", { produit: "fonte" });
+  const noAccord = await post("/api/checkout", { produit: "fonte" });
+  check("paiement_sans_accord_refuse", noAccord.status === 400 && noAccord.json.error === "consent_required", noAccord);
+  const co = await post("/api/checkout", { produit: "fonte", accord: true });
   const sess = Object.values(stack.mocks.state.sessions).at(-1);
   const coReq = stack.mocks.state.stripe.find(x => x.path === "/v1/checkout/sessions");
   const pay = await fetch(sess.url + "/ok", { redirect: "manual" });
@@ -94,7 +101,7 @@ try {
   check("achat_programme", co.json.url === sess.url && coReq.body.mode === "payment" && coReq.body["line_items[0][price]"] === "price_fonte" && coReq.body.locale === "fr" && coReq.body["custom_text[submit][message]"].includes("L221-28")
     && back.pathname === "/index.html" && cf.status === 200 && cf.json.produit === "fonte" && typeof cf.json.jeton === "string", { co, coReq: coReq && coReq.body, back: String(back), cf });
   const fonteTok = cf.json.jeton;
-  const unpaid = await post("/api/checkout", { produit: "fonte" });
+  const unpaid = await post("/api/checkout", { produit: "fonte", accord: true });
   const sess2 = Object.values(stack.mocks.state.sessions).at(-1);
   const np = await post("/api/checkout/confirm", { session: sess2.id });
   check("session_non_payee", unpaid.status === 200 && np.status === 402 && np.json.error === "not_paid", np);
@@ -108,9 +115,9 @@ try {
   check("jeton_falsifie_refuse", fq[3].status === 402 && fq[3].json.error === "quota", fq.map(x => x.status));
 
   // abonnement Premium : prix réduit avec le programme, plein tarif sinon
-  const pr = await post("/api/checkout", { produit: "premium", acces: { fonte: fonteTok } });
+  const pr = await post("/api/checkout", { produit: "premium", accord: true, acces: { fonte: fonteTok } });
   const prReq = stack.mocks.state.stripe.filter(x => x.path === "/v1/checkout/sessions").at(-1);
-  const full = await post("/api/checkout", { produit: "premium" });
+  const full = await post("/api/checkout", { produit: "premium", accord: true });
   const fullReq = stack.mocks.state.stripe.filter(x => x.path === "/v1/checkout/sessions").at(-1);
   check("prix_premium", pr.status === 200 && prReq.body.mode === "subscription" && prReq.body["line_items[0][price]"] === "price_reduit" && fullReq.body["line_items[0][price]"] === "price_premium" && prReq.body.success_url.includes("/carnet.html?achat={CHECKOUT_SESSION_ID}#offre"), { pr: prReq.body, full: fullReq.body["line_items[0][price]"] });
   const psess = Object.values(stack.mocks.state.sessions).find(x => x.url === pr.json.url);
@@ -125,6 +132,15 @@ try {
   // restauration sur un autre appareil, puis abonnement arrêté
   const ac = await post("/api/access", { jetons: [fonteTok, premTok, "n'importe.quoi"] });
   check("restauration", ac.json.fonte === fonteTok && typeof ac.json.premium === "string" && ac.json.statut === "actif", ac.json);
+  // résiliation : effet à la fin du mois payé, l'accès continue jusque-là
+  const rs = await post("/api/resiliation", { jeton: premTok });
+  const rs2 = await post("/api/resiliation", { jeton: premTok });
+  const afterRs = await post("/api/access", { jetons: [premTok] });
+  const subRs = Object.values(stack.mocks.state.subs).at(-1);
+  check("resiliation", rs.status === 200 && rs.json.statut === "resilie" && rs.json.fin > Date.now() + 29 * 864e5 && rs.json.ref === subRs.id && rs.json.editeur.nom === "Camille Martin" && subRs.cancel_at_period_end === true
+    && rs2.status === 200 && typeof afterRs.json.premium === "string" && afterRs.json.resilie === true, { rs: rs.json, rs2: rs2.status, afterRs: afterRs.json });
+  const badRs = await post("/api/resiliation", { jeton: fonteTok });
+  check("resiliation_jeton_programme_refuse", badRs.status === 400, badRs);
   const portal = await post("/api/portal", { jeton: premTok });
   check("portail_client", portal.status === 200 && portal.json.url.includes("customer=cus_test_") && decodeURIComponent(portal.json.url).includes("/carnet.html#offre"), portal.json);
   Object.values(stack.mocks.state.subs).forEach(sub => { sub.status = "canceled"; });

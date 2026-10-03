@@ -97,6 +97,12 @@ export function startMocks({ anthropicPort = 8792, stripePort = 8793 } = {}) {
         const expand = Object.entries(Object.fromEntries(u.searchParams)).some(([k, v]) => k.startsWith("expand") && v === "subscription");
         return sendJson(res, { ...s, subscription: s.subscription && expand ? state.subs[s.subscription] : s.subscription });
       }
+      if (req.method === "POST" && (m = path.match(/^\/v1\/subscriptions\/([\w]+)$/))) {
+        const sub = state.subs[m[1]], b = parse(body);
+        if (!sub) return sendJson(res, { error: { message: "No such subscription" } }, 404);
+        if (b.cancel_at_period_end === "true") sub.cancel_at_period_end = true;
+        return sendJson(res, sub);
+      }
       if (req.method === "GET" && (m = path.match(/^\/v1\/subscriptions\/([\w]+)$/))) {
         const sub = state.subs[m[1]];
         return sub ? sendJson(res, sub) : sendJson(res, { error: { message: "No such subscription" } }, 404);

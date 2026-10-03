@@ -3,7 +3,7 @@ const { chromium, devices } = require("/opt/node-tools/node_modules/playwright")
 const http = require("http"), fs = require("fs"), path = require("path");
 const DIR = __dirname, APP = path.join(DIR, "..", "dist", "fonte-appli");
 const JSPDF = fs.readFileSync(path.join(DIR, "node_modules/jspdf/dist/jspdf.umd.min.js"), "utf8");
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".webmanifest": "application/manifest+json", ".png": "image/png" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json", ".png": "image/png" };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
   if (p.endsWith("/")) p += "index.html";
@@ -12,13 +12,14 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": TYPES[path.extname(f)] || "application/octet-stream", "Cache-Control": "no-cache" });
   fs.createReadStream(f).pipe(res);
 });
-const R = {}, errors = [];
+const R = {}, errors = [], external = [];
 const check = (name, cond, extra) => { R[name] = cond ? "OK" : "FAIL " + JSON.stringify(extra ?? null).slice(0, 700); };
 const quiet = async (p, tag) => {
   await p.route("https://fonts.googleapis.com/**", r => r.fulfill({ status: 200, contentType: "text/css", body: "" }));
   await p.route("https://fonts.gstatic.com/**", r => r.abort());
   await p.route("https://cdnjs.cloudflare.com/**", r => r.fulfill({ status: 200, contentType: "application/javascript", body: JSPDF }));
   p.on("pageerror", e => errors.push(tag + " pageerror: " + e.message));
+  p.on("request", r => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol) && u.hostname !== "localhost") external.push(tag + " " + u.hostname); });
   p.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(tag + " console: " + m.text()); });
 };
 server.listen(8791, async () => {
@@ -50,13 +51,18 @@ server.listen(8791, async () => {
   const coach = await page.textContent("#coach-off");
   check("coach_annonce", coach.includes("arrive bientôt"), coach);
   await page.click("#tab-prog");
+  // appli installée sans paiement branché : jamais de déblocage gratuit
   await page.click("#panel-prog .paywall .unlock");
+  await page.waitForTimeout(100);
+  const noFree = await page.evaluate(() => ({ unlocked, toast: document.querySelector("#toast").textContent, note: document.querySelector("#panel-prog .paywall .demo").textContent, legal: [...document.querySelectorAll(".pwa-legal a")].map(a => a.getAttribute("href")) }));
+  check("pas_de_deblocage_gratuit", !noFree.unlocked && noFree.toast.includes("bientôt") && noFree.note.includes("bientôt"), noFree);
+  check("liens_legaux", noFree.legal.join("|") === "legal/mentions-legales.html|legal/confidentialite.html|legal/conditions.html", noFree.legal);
   // programme → carnet sans code à copier
   await page.click('.appnav a[href="carnet.html"]');
   await page.waitForSelector("[data-act=start]");
   await page.waitForTimeout(200);
   const car = await page.evaluate(() => ({ storeMode, example: !!program().example, n: program().sessions.length, paid: !!program().paid, nav: [...document.querySelectorAll(".nav .nav-in > *")].map(a => a.textContent.trim()), stage: profile.stage && profile.stage.n }));
-  check("carnet_recoit_programme", car.storeMode === "local" && !car.example && car.n === 3 && car.paid && car.nav.join("|") === "Programme|Séance|Historique|Progrès|Offre" && car.stage === 1, car);
+  check("carnet_recoit_programme", car.storeMode === "local" && !car.example && car.n === 3 && !car.paid && car.nav.join("|") === "Programme|Séance|Historique|Progrès|Offre" && car.stage === 1, car);
   // séance enregistrée sur l'appareil
   await page.click('[data-act=start][data-si="0"]');
   await page.waitForSelector(".livehead");
@@ -93,11 +99,23 @@ server.listen(8791, async () => {
   await pp.goto(BASE + "index.html");
   await pp.click("#go");
   await pp.waitForSelector("#panel-prog .day");
-  await pp.click("#panel-prog .paywall .unlock");
+  await pp.evaluate(() => { unlocked = true; renderAll(); });
   const [dl] = await Promise.all([pp.waitForEvent("download", { timeout: 15000 }), pp.click("#pdf-btn")]);
   const dlPath = await dl.path();
   check("pdf_telecharge", dl.suggestedFilename() === "programme-fonte.pdf" && fs.statSync(dlPath).size > 10000, dl.suggestedFilename());
   await pctx.close();
+
+  // pages légales : servies par l'appli, informations de l'éditeur à compléter signalées
+  const lp = await ctx.newPage();
+  await quiet(lp, "legal");
+  const legal = {};
+  for (const f of ["mentions-legales", "confidentialite", "conditions"]) {
+    await lp.goto(BASE + "legal/" + f + ".html");
+    legal[f] = await lp.evaluate(() => ({ h1: document.querySelector("h1").textContent, todo: document.querySelectorAll(".todo").length, font: getComputedStyle(document.body).fontFamily }));
+  }
+  check("pages_legales", legal["mentions-legales"].h1 === "Mentions légales" && legal.conditions.h1.includes("Conditions générales") && legal.confidentialite.todo > 0 && legal.conditions.todo > 3 && /Barlow/.test(legal.conditions.font), legal);
+  await lp.screenshot({ path: path.join(DIR, "legal-conditions.png") });
+  await lp.close();
 
   // installation : bandeau et bouton natif simulé
   const p2 = await ctx.newPage();
@@ -134,6 +152,7 @@ server.listen(8791, async () => {
   check("guide_iphone", guide.includes("Sur l'écran d'accueil") && hidden, { guide, hidden });
   await b2.close();
   server.close();
+  check("aucune_requete_tierce", external.length === 0, [...new Set(external)]);
   R.errors = errors;
   console.log(JSON.stringify(R, null, 1));
 });

@@ -1,7 +1,8 @@
 /* Fonte : l'appli s'ouvre même sans réseau. Les pages sont reprises du réseau dès qu'il revient, pour rester à jour. */
 const VERSION = "__VERSION__";
 const CACHE = "fonte-" + VERSION, EXT = "fonte-ext";
-const CORE = ["./", "index.html", "carnet.html", "pwa.js", "manifest.webmanifest", "icons/icon-32.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png"];
+const FONTS = ["barlow-400", "barlow-500", "barlow-600", "barlow-condensed-600", "barlow-condensed-800"].flatMap(f => [`fonts/${f}-latin.woff2`, `fonts/${f}-latin-ext.woff2`]);
+const CORE = ["./", "index.html", "carnet.html", "pwa.js", "manifest.webmanifest", "fonts/fonts.css", ...FONTS, "icons/icon-32.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith("fonte-") && k !== CACHE && k !== EXT).map(k => caches.delete(k)))).then(() => self.clients.claim()));

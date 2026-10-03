@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Appli installable : réunit Fonte (index.html) et Fonte Suivi (carnet.html) dans un dossier prêt à mettre en ligne."""
-import hashlib, os, shutil, subprocess, zipfile
+import hashlib, os, re, shutil, subprocess, zipfile
 ROOT = os.path.dirname(os.path.abspath(__file__))
 os.chdir(ROOT)
 subprocess.run(["sh", "build.sh"], check=True)
@@ -22,18 +22,31 @@ def page(title, body):
             '<meta name="apple-mobile-web-app-title" content="Fonte"><meta name="apple-mobile-web-app-status-bar-style" content="default">'
             '<style>[hidden]{display:none!important}</style><script src="pwa.js"></script></head><body>'
             + body + '</body></html>')
-open(os.path.join(OUT, "index.html"), "w").write(page("Fonte", open("fonte.html").read()))
-open(os.path.join(OUT, "carnet.html"), "w").write(page("Fonte · Carnet", open("suivi.html").read()))
+# appli installée : polices servies par l'appli (aucune requête vers Google), le reste est identique aux artefacts
+GOOGLE_FONTS = re.compile(r'<link rel="preconnect" href="https://fonts\.googleapis\.com">\s*<link rel="preconnect" href="https://fonts\.gstatic\.com" crossorigin>\s*<link href="https://fonts\.googleapis\.com/css2\?[^"]+" rel="stylesheet">')
+def local_fonts(html):
+    out, n = GOOGLE_FONTS.subn('<link rel="stylesheet" href="fonts/fonts.css">', html)
+    assert n == 1, "liens Google Fonts introuvables"
+    return out
+open(os.path.join(OUT, "index.html"), "w").write(page("Fonte", local_fonts(open("fonte.html").read())))
+open(os.path.join(OUT, "carnet.html"), "w").write(page("Fonte · Carnet", local_fonts(open("suivi.html").read())))
+for d in ["fonts", "vendor", "legal"]:
+    shutil.copytree(os.path.join("pwa", d), os.path.join(OUT, d))
 for f in ["pwa.js", "manifest.webmanifest"]:
     shutil.copy(os.path.join("pwa", f), OUT)
 for f in os.listdir(os.path.join("pwa", "icons")):
     shutil.copy(os.path.join("pwa", "icons", f), os.path.join(OUT, "icons"))
 h = hashlib.sha1()
-for f in ["index.html", "carnet.html", "pwa.js", "manifest.webmanifest"]:
+for f in ["index.html", "carnet.html", "pwa.js", "manifest.webmanifest", os.path.join("fonts", "fonts.css")]:
     h.update(open(os.path.join(OUT, f), "rb").read())
 open(os.path.join(OUT, "sw.js"), "w").write(open(os.path.join("pwa", "sw.js")).read().replace("__VERSION__", h.hexdigest()[:10]))
 # Netlify et la plupart des hébergeurs : en-têtes pour que le service worker soit toujours relu
-open(os.path.join(OUT, "_headers"), "w").write("/sw.js\n  Cache-Control: no-cache\n/manifest.webmanifest\n  Content-Type: application/manifest+json\n")
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
+       "connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+open(os.path.join(OUT, "_headers"), "w").write(
+    "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n"
+    f"  Content-Security-Policy: {CSP}\n  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()\n"
+    "/sw.js\n  Cache-Control: no-cache\n/manifest.webmanifest\n  Content-Type: application/manifest+json\n")
 shutil.copy(os.path.join("pwa", "LISEZ-MOI.txt"), "dist")
 with zipfile.ZipFile(os.path.join("dist", "fonte-appli.zip"), "w", zipfile.ZIP_DEFLATED) as z:
     z.write(os.path.join("dist", "LISEZ-MOI.txt"), "LISEZ-MOI.txt")

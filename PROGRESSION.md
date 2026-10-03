@@ -22,14 +22,15 @@ concurrentes en s'appuyant sur les avis clients.
 ## À faire, par priorité
 
 ### 1. Conformité légale et RGPD
-- [ ] Pages légales (mentions légales, confidentialité, conditions générales) ; infos de l'éditeur à un seul endroit
-- [ ] Consentement explicite avant le coach (données de santé, IA, 15 ans et plus), vérifié par le serveur
-- [ ] Aucune requête vers des tiers dans l'appli installée (polices et jsPDF servis par l'appli)
-- [ ] Export, import et suppression de toutes les données (portabilité, effacement)
-- [ ] Bouton « Résilier mon abonnement » (résiliation en trois clics) et confirmation
-- [ ] Transparence IA (règlement européen), avertissement santé
-- [ ] Journaux serveur minimaux ; registre des traitements ; liste de contrôle pour l'éditeur
-- [ ] Plus de déblocage « démo » dans l'appli installée quand le paiement n'est pas branché
+- [x] Pages légales (mentions légales, confidentialité, conditions générales avec formulaire de rétractation) ; infos de l'éditeur à un seul endroit (wrangler.jsonc ou legal/editeur.js)
+- [x] Consentement explicite avant le coach et l'analyse (données de santé, IA, 15 ans et plus), vérifié par le serveur, retirable
+- [x] Aucune requête vers des tiers dans l'appli installée (polices et jsPDF servis par l'appli) + politique de sécurité (CSP) stricte
+- [x] Export, import et suppression de toutes les données (portabilité, effacement)
+- [x] Bouton « Résilier mon abonnement » (trois clics), effet en fin de mois payé, confirmation téléchargeable
+- [x] Transparence IA (règlement européen), avertissement santé ; accord exprès avant paiement (rétractation) gardé dans Stripe et sur la facture
+- [x] Journaux serveur minimaux (sans journal de requêtes) ; paiement réel bloqué tant que les mentions légales manquent
+- [ ] Registre des traitements et liste de contrôle pour l'éditeur (docs/conformite.md) ; vérifier les points juridiques en ligne
+- [x] Plus de déblocage « démo » dans l'appli installée quand le paiement n'est pas branché
 
 ### 2. Étude des avis clients des meilleures applis
 - [ ] Hevy, Strong, Fitbod, JEFIT, Freeletics, Alpha Progression, MacroFactor, Boostcamp… → `docs/analyse-concurrence.md`
@@ -43,3 +44,4 @@ concurrentes en s'appuyant sur les avis clients.
 ## Journal
 
 - 2026-10-03 : projet versionné sur la branche `claude/fonte-app` (dépôt IA-VIDEO, branche dédiée sans lien avec hoopcut).
+- 2026-10-03 (soir) : conformité RGPD et droit de la consommation dans l'appli et le serveur ; tous les tests au vert (dont 31 vérifications de bout en bout).

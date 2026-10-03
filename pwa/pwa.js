@@ -18,7 +18,7 @@
   const configReady = !http ? Promise.resolve(config) : Promise.race([
     fetch("api/config", { cache: "no-store" })
       .then(r => (r.ok ? r.json() : { coach: false, paiement: false }))
-      .then(c => { config = { coach: c.coach === true, paiement: c.paiement === true }; store.set("fonte.config", JSON.stringify(config)); emit("fonte:config", config); return config; }),
+      .then(c => { config = { coach: c.coach === true, paiement: c.paiement === true, legal: c.legal !== false }; store.set("fonte.config", JSON.stringify(config)); emit("fonte:config", config); return config; }),
     new Promise(ok => setTimeout(() => ok(config), cached ? 2500 : 8000))
   ]).catch(() => config);
 
@@ -47,8 +47,8 @@
     return data;
   }
   /* paiement : page Stripe, puis retour dans l'appli avec ?achat=<session> */
-  async function buy(produit) {
-    const r = await api("checkout", { produit, acces: { fonte: token("fonte") } });
+  async function buy(produit, accord) {
+    const r = await api("checkout", { produit, accord: accord === true, acces: { fonte: token("fonte") } });
     location.assign(r.url);
   }
   const PENDING = "fonte.achat.attente";
@@ -73,6 +73,7 @@
       const before = has("premium"), r = await api("access", { jetons: [t] });
       store.set("fonte.acces.verif", String(Date.now()));
       store.set(TOK.premium, r.premium || null);
+      store.set(CANCEL, r.resilie && r.premium ? JSON.stringify({ fin: r.fin || 0 }) : null);
       if (has("premium") !== before) emit("fonte:acces", { premium: r.statut });
     } catch (e) { /* hors connexion : nouvel essai plus tard */ }
   }
@@ -92,6 +93,140 @@
     location.assign(r.url);
   }
   const accessCode = () => [token("fonte"), token("premium")].filter(Boolean).join("\n");
+  /* résiliation en trois clics : Offre > Résilier mon abonnement > Confirmer ; effet à la fin du mois payé */
+  const CANCEL = "fonte.acces.resiliation";
+  const cancelInfo = () => { try { return JSON.parse(store.get(CANCEL)); } catch (e) { return null; } };
+  async function cancelSub() {
+    const r = await api("resiliation", { jeton: token("premium") });
+    store.set(CANCEL, JSON.stringify({ le: r.le, fin: r.fin }));
+    emit("fonte:acces", { resilie: true });
+    return r;
+  }
+
+  /* ===== Accord pour le coach : des données de santé partent vers un prestataire d'IA (RGPD, art. 9.2.a) ===== */
+  const CONSENT = "fonte.accord.coach", CONSENT_V = 1;
+  const consentInfo = () => { try { const c = JSON.parse(store.get(CONSENT)); return c && c.v === CONSENT_V ? c : null; } catch (e) { return null; } };
+  const needsConsent = () => !!config.coach && !consentInfo();
+  function consentHTML(title) {
+    return `<div class="pwa-consent" role="group" aria-labelledby="pwa-consent-t"><b id="pwa-consent-t">${title || "Avant ta première question"}</b>
+      <p>Le coach est une <b>intelligence artificielle</b> (Claude, de la société Anthropic). Pour te répondre, ta question et les informations utiles de ton profil (objectif, niveau, programme, zones sensibles, et ta nutrition si tu l'as remplie) passent par le serveur de Fonte jusqu'à Anthropic, qui génère la réponse. Le serveur de Fonte ne les garde pas.</p>
+      <label class="pwa-check"><input type="checkbox" data-pwa-consent-box> <span>J'ai 15 ans ou plus et j'accepte que ces informations, dont certaines concernent ma santé, soient utilisées pour me répondre.</span></label>
+      <div class="pwa-row"><button type="button" class="primary" data-pwa-consent disabled>Activer le coach</button><a href="legal/confidentialite.html#coach">En savoir plus</a></div>
+      <p class="pwa-muted">Tu peux retirer ton accord à tout moment : Offre &gt; Tes données.</p></div>`;
+  }
+  document.addEventListener("change", e => {
+    if (!e.target.matches("[data-pwa-consent-box]")) return;
+    const b = e.target.closest(".pwa-consent").querySelector("[data-pwa-consent]");
+    if (b) b.disabled = !e.target.checked;
+  });
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-pwa-consent]");
+    if (!b || !b.closest(".pwa-consent").querySelector("[data-pwa-consent-box]").checked) return;
+    store.set(CONSENT, JSON.stringify({ v: CONSENT_V, t: Date.now() }));
+    emit("fonte:accord", { ok: true });
+  });
+  function withdrawConsent() { store.set(CONSENT, null); emit("fonte:accord", { ok: false }); }
+
+  /* ===== Feuilles de confirmation : achat (récapitulatif, accord exprès) et résiliation (confirmation téléchargeable) ===== */
+  const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const dateFr = (t, withTime) => new Date(t).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}) });
+  function sheet(html, label) {
+    css();
+    const back = document.activeElement, d = document.createElement("div");
+    d.className = "pwa-sheet";
+    d.innerHTML = `<div class="pwa-box" role="dialog" aria-modal="true" aria-label="${esc(label)}">${html}</div>`;
+    document.body.appendChild(d);
+    const close = () => { d.remove(); if (back && back.focus) back.focus(); };
+    d.addEventListener("click", e => { if (e.target === d || e.target.closest("[data-sheet-close]")) close(); });
+    d.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+    const first = d.querySelector("input, button");
+    if (first) first.focus();
+    return { el: d, close };
+  }
+  const OFFERS = {
+    fonte: () => ({ titre: "Débloquer Fonte", prix: "19 € TTC", rythme: "paiement unique",
+      plus: ["Toutes tes séances et la progression sur 4 semaines", "Nutrition, mobilité et export PDF", "Coach IA sans limite de questions", "−50 % sur Premium, ton carnet"],
+      accord: "Je veux accéder tout de suite au programme complet et je reconnais perdre mon droit de rétractation de 14 jours dès que l'accès m'est donné.",
+      note: "Paiement unique, sans abonnement." }),
+    premium: () => ({ titre: "Passer à Premium", prix: has("fonte") ? "2,49 € TTC" : "4,99 € TTC", rythme: "par mois, sans engagement",
+      plus: ["Conseil de charge à chaque exercice", "Courbes de force, records, séries par muscle", "Analyse de tes progrès par le coach IA", "Historique illimité"],
+      accord: "Je demande à profiter de Premium dès maintenant. Si je me rétracte dans les 14 jours, je ne paierai que la part déjà utilisée.",
+      note: "Résiliable à tout moment en trois clics, sans frais." })
+  };
+  function checkout(produit) {
+    const o = OFFERS[produit]();
+    const s = sheet(`<h2>${o.titre}</h2><p class="pwa-price"><b>${o.prix}</b> ${o.rythme}</p>
+      <ul class="pwa-plus">${o.plus.map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      <label class="pwa-check"><input type="checkbox" data-buy-ok> <span>${esc(o.accord)}</span></label>
+      <p class="pwa-muted">${o.note} En continuant, tu acceptes les <a href="legal/conditions.html" target="_blank" rel="noopener">conditions générales de vente</a>. Paiement sécurisé par Stripe.</p>
+      <p class="pwa-err" role="alert" hidden></p>
+      <div class="pwa-row"><button type="button" class="pwa-ok" data-buy disabled>Continuer vers le paiement</button><button type="button" class="pwa-link" data-sheet-close>Annuler</button></div>`, o.titre);
+    const box = s.el.querySelector("[data-buy-ok]"), go = s.el.querySelector("[data-buy]"), err = s.el.querySelector(".pwa-err");
+    box.addEventListener("change", () => { go.disabled = !box.checked; });
+    go.addEventListener("click", async () => {
+      if (!box.checked) return;
+      go.disabled = true; go.textContent = "Ouverture du paiement…"; err.hidden = true;
+      try { await buy(produit, true); }
+      catch (e) {
+        go.disabled = false; go.textContent = "Continuer vers le paiement";
+        err.textContent = e.code === "payments_off" ? "Le paiement n'est pas encore ouvert. Réessaie bientôt." : "Le paiement n'a pas pu s'ouvrir. Vérifie ta connexion et réessaie.";
+        err.hidden = false;
+      }
+    });
+    return s;
+  }
+  function cancelFlow() {
+    const until = window.FONTE_PWA.premiumUntil();
+    const s = sheet(`<h2>Résilier ton abonnement Premium</h2>
+      <p>Premium reste actif jusqu'au <b>${until ? dateFr(until) : "terme du mois payé"}</b>, puis s'arrête : plus aucun prélèvement. Tes séances et ton programme restent sur ton téléphone.</p>
+      <p class="pwa-err" role="alert" hidden></p>
+      <div class="pwa-row"><button type="button" class="pwa-ok pwa-danger" data-cancel-ok>Confirmer la résiliation</button><button type="button" class="pwa-link" data-sheet-close>Garder Premium</button></div>`, "Résilier ton abonnement Premium");
+    const go = s.el.querySelector("[data-cancel-ok]"), err = s.el.querySelector(".pwa-err");
+    go.addEventListener("click", async () => {
+      go.disabled = true; go.textContent = "Résiliation…"; err.hidden = true;
+      try {
+        const r = await cancelSub();
+        const box = s.el.querySelector(".pwa-box");
+        box.innerHTML = `<h2>Résiliation enregistrée</h2><p>Demande reçue le <b>${dateFr(r.le, true)}</b>. Premium reste actif jusqu'au <b>${dateFr(r.fin)}</b>, puis s'arrête. Aucun autre prélèvement n'aura lieu.</p>
+          <p class="pwa-muted">Garde cette confirmation : télécharge-la ci-dessous.</p>
+          <div class="pwa-row"><button type="button" class="pwa-ok" data-cancel-proof>Télécharger la confirmation</button><button type="button" class="pwa-link" data-sheet-close>Fermer</button></div>`;
+        box.querySelector("[data-cancel-proof]").addEventListener("click", () => downloads.save({ filename: `fonte-confirmation-resiliation-${new Date(r.le).toISOString().slice(0, 10)}.txt`, data: cancelText(r) }));
+        box.querySelector("[data-cancel-proof]").focus();
+      } catch (e) {
+        go.disabled = false; go.textContent = "Confirmer la résiliation";
+        err.textContent = e.code === "network" ? "Pas de connexion : réessaie quand tu as du réseau." : "La résiliation n'a pas pu être enregistrée. Réessaie, ou utilise « Gérer mon abonnement ».";
+        err.hidden = false;
+      }
+    });
+    return s;
+  }
+  const cancelText = r => [
+    "CONFIRMATION DE RÉSILIATION — FONTE PREMIUM", "",
+    `Date de la demande : ${dateFr(r.le, true)}`,
+    `Abonnement : Fonte Suivi Premium (référence ${r.ref || "—"})`,
+    `Fin de l'abonnement : ${dateFr(r.fin)}`,
+    "Aucun prélèvement ne sera effectué après cette date.", "",
+    r.editeur && r.editeur.nom ? `Éditeur : ${r.editeur.nom}${r.editeur.email ? ` — ${r.editeur.email}` : ""}` : "Éditeur : voir les mentions légales de l'appli.", ""
+  ].join("\r\n");
+
+  /* ===== Tes données : tout est sur l'appareil ; export (portabilité), import d'une sauvegarde, effacement ===== */
+  const localKeys = () => { const out = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^fonte/.test(k)) out.push(k); } } catch (e) { /* stockage bloqué */ } return out.sort(); };
+  async function exportAll() {
+    const donnees = {};
+    localKeys().forEach(k => { donnees[k] = store.get(k); });
+    const json = JSON.stringify({ appli: "fonte", version: 1, exporte: new Date().toISOString(), donnees }, null, 2);
+    return downloads.save({ filename: `fonte-mes-donnees-${new Date().toISOString().slice(0, 10)}.json`, data: new Blob([json], { type: "application/json" }) });
+  }
+  async function importAll(file) {
+    let o;
+    try { o = JSON.parse(await file.text()); } catch (e) { throw fail("invalid_backup"); }
+    const entries = o && o.appli === "fonte" && isObj(o.donnees) ? Object.entries(o.donnees).filter(([k, v]) => /^fonte/.test(k) && typeof v === "string") : [];
+    if (!entries.length) throw fail("invalid_backup");
+    localKeys().forEach(k => store.set(k, null));
+    entries.forEach(([k, v]) => store.set(k, v));
+    return entries.length;
+  }
+  function eraseAll() { localKeys().forEach(k => store.set(k, null)); }
   addEventListener("storage", e => { if (e.key && e.key.startsWith("fonte.acces.") && e.key !== "fonte.acces.verif") emit("fonte:acces", {}); });
 
   // retour de la page de paiement : l'adresse est nettoyée tout de suite, l'achat confirmé une fois l'appli prête
@@ -197,6 +332,7 @@
     const tools = Array.isArray(opts.tools) ? opts.tools.slice(0, 8) : [];
     const byName = Object.fromEntries(tools.map(t => [t.name, t]));
     const defs = tools.map(t => ({ name: t.name, description: t.description || "", input_schema: t.inputSchema || { type: "object", properties: {} } }));
+    if (!consentInfo()) throw fail("consent_required", { text: "" });
     let messages = toMessages(input), full = "", truncated = false, left = null;
     if (!messages.length) throw fail("invalid_request");
     const show = d => { full += d; if (opts.onText) opts.onText({ text: full, delta: d }); };
@@ -204,7 +340,7 @@
       const mark = full;
       let sep = full && !/\s$/.test(full) ? "\n\n" : "", done;
       try {
-        done = await turn({ kind, device: device(), tier: opts.modelTier === "complex" ? "complex" : "default", acces: { fonte: token("fonte"), premium: token("premium") }, messages, ...(defs.length ? { tools: defs } : {}) }, opts.signal,
+        done = await turn({ kind, device: device(), consentement: 1, tier: opts.modelTier === "complex" ? "complex" : "default", acces: { fonte: token("fonte"), premium: token("premium") }, messages, ...(defs.length ? { tools: defs } : {}) }, opts.signal,
           d => { if (sep) { show(sep); sep = ""; } show(d); },
           () => { full = mark; sep = mark && !/\s$/.test(mark) ? "\n\n" : ""; if (opts.onText) opts.onText({ text: full, delta: "" }); });
       } catch (e) { e.text = full; throw e; }
@@ -226,6 +362,17 @@
   }
   sample.limits = async () => ({ maxPromptBytes: 240000, tools: { maxCount: 8 } });
 
+  const downloads = {
+    save: async ({ filename, data }) => {
+      const blob = data instanceof Blob ? data : new Blob([data], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = filename || "fonte"; a.rel = "noopener";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      return { status: "saved" };
+    }
+  };
+
   window.FONTE_PWA = {
     page: carnet ? "carnet" : "programme",
     suiviUrl: "carnet.html",
@@ -235,20 +382,14 @@
     coachOn: () => config.coach,
     payOn: () => config.paiement,
     has, buy, portal, restore, refresh, accessCode,
-    premiumUntil: () => { const d = info("premium"); return d && d.exp ? d.exp - 3 * 864e5 : 0; }
+    premiumUntil: () => { const d = info("premium"); return d && d.exp ? d.exp - 3 * 864e5 : 0; },
+    cancelSub, cancelInfo, cancelFlow, checkout, consentInfo, needsConsent, consentHTML, withdrawConsent, exportAll, importAll, eraseAll,
+    device, save: o => downloads.save(o),
+    legalOk: () => config.legal !== false
   };
 
   // pas de compte Claude ici : coach par le serveur de l'appli, fichiers (PDF, CSV) par le téléchargement du navigateur
   if (!window.claude) {
-    const downloads = {
-      save: async ({ filename, data }) => {
-        const url = URL.createObjectURL(data), a = document.createElement("a");
-        a.href = url; a.download = filename || "fonte"; a.rel = "noopener";
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        return { status: "saved" };
-      }
-    };
     window.claude = {
       use: async name => {
         if (name === "downloads") return downloads;
@@ -284,7 +425,7 @@
 .pwa-go{background:var(--yellow);color:#18202A;border:0;border-radius:999px;padding:10px 14px;font:700 14px/1 var(--body);cursor:pointer;white-space:nowrap;min-height:40px}
 .pwa-x{background:none;border:0;color:inherit;font-size:24px;line-height:1;cursor:pointer;padding:6px 8px;min-width:40px;min-height:40px}
 .pwa-sheet{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.5);display:grid;align-items:end;justify-items:center;padding:12px}
-.pwa-box{background:var(--surface);color:var(--ink);border-radius:16px;padding:18px 18px 16px;max-width:440px;width:100%;display:grid;gap:12px;margin-bottom:env(safe-area-inset-bottom,0px)}
+.pwa-box{background:var(--surface);color:var(--ink);border-radius:16px;padding:18px 18px 16px;max-width:440px;width:100%;display:grid;gap:12px;margin-bottom:env(safe-area-inset-bottom,0px);max-height:calc(100dvh - 24px);overflow:auto}
 .pwa-box h2{font-size:1.5rem}
 .pwa-box ol{margin:0;padding-left:20px;display:grid;gap:8px}
 .pwa-box svg{width:20px;height:20px;vertical-align:-4px;stroke:var(--blue);fill:none;stroke-width:1.8}
@@ -297,7 +438,24 @@
 .appnav a[aria-current="page"] svg{stroke:var(--red)}
 html.has-appnav body{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
 html.has-appnav .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
-.nav .nav-in{grid-template-columns:repeat(5,1fr)}`;
+.nav .nav-in{grid-template-columns:repeat(5,1fr)}
+.pwa-legal{max-width:720px;margin:0 auto;padding:20px 16px 28px;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px}
+.pwa-legal a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+.pwa-consent{background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:16px 18px;display:grid;gap:10px;text-align:left}
+.pwa-consent p{margin:0;font-size:15px;line-height:1.5}
+.pwa-check{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.45;cursor:pointer}
+.pwa-check input{width:22px;height:22px;margin:1px 0 0;flex:none;accent-color:var(--blue)}
+.pwa-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.pwa-row .primary[disabled]{opacity:.45;cursor:not-allowed}
+.pwa-muted{color:var(--muted);font-size:13.5px!important}
+.pwa-box .pwa-price{margin:0;font-size:16px}
+.pwa-box .pwa-price b{font:800 1.8rem/1 var(--display,inherit);margin-right:4px}
+.pwa-plus{margin:0;padding-left:20px;display:grid;gap:4px;font-size:15px}
+.pwa-box p{margin:0}
+.pwa-err{color:var(--red);font-weight:600;font-size:14.5px}
+.pwa-link{background:none;border:0;color:var(--blue);font:600 15px/1 var(--body,inherit);cursor:pointer;padding:12px 4px;min-height:44px}
+.pwa-ok[disabled]{opacity:.45;cursor:not-allowed}
+.pwa-danger{background:var(--red)!important;color:#fff!important}`;
     document.head.appendChild(st);
   }
 
@@ -371,8 +529,17 @@ html.has-appnav .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
   window.FONTE_PWA.install = install;
   window.FONTE_PWA.canInstall = () => !standalone() && (!!deferred || ios);
 
+  function legalFooter() {
+    css();
+    const f = document.createElement("footer");
+    f.className = "pwa-legal";
+    f.innerHTML = '<a href="legal/mentions-legales.html">Mentions légales</a><a href="legal/confidentialite.html">Confidentialité</a><a href="legal/conditions.html">Conditions générales</a>';
+    const nav = document.querySelector(".appnav");
+    if (nav) nav.before(f); else document.body.appendChild(f);
+  }
   document.addEventListener("DOMContentLoaded", () => {
     if (carnet) navCarnet(); else navProgramme();
+    legalFooter();
     if (ios) show();
     if (achat === "annule") setTimeout(() => emit("fonte:acces", { annule: true }), 0);
     configReady.then(() => { if (!config.paiement) return; if (pending) confirmPurchase(pending, fromStripe); refresh(false); });

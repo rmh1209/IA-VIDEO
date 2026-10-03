@@ -24,7 +24,20 @@
     "STRIPE_PRICE_FONTE": "",
     "STRIPE_PRICE_PREMIUM": "",
     "STRIPE_PRICE_PREMIUM_REDUIT": "",
-    "STRIPE_PORTAL_CONFIG": ""
+    "STRIPE_PORTAL_CONFIG": "",
+    // éditeur (mentions légales, confidentialité, conditions de vente) : obligatoire avant d'encaisser pour de vrai
+    "EDITEUR_NOM": "",
+    "EDITEUR_STATUT": "",
+    "EDITEUR_ADRESSE": "",
+    "EDITEUR_EMAIL": "",
+    "EDITEUR_TELEPHONE": "",
+    "EDITEUR_SIRET": "",
+    "EDITEUR_RCS": "",
+    "EDITEUR_TVA": "",
+    "EDITEUR_DIRECTEUR": "",
+    "MEDIATEUR_NOM": "",
+    "MEDIATEUR_SITE": ""
   },
-  "observability": { "enabled": true }
+  // journaux : seulement les messages d'erreur du serveur, pas le détail de chaque requête (adresse IP, navigateur)
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

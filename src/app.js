@@ -30,7 +30,9 @@ let tab = "prog";
 let undoStack = [];
 /* appli installée avec paiement en ligne : l'accès vient du jeton d'achat rangé sur l'appareil, plus d'un simple clic */
 const PAY = () => !!(window.FONTE_PWA && window.FONTE_PWA.payOn && window.FONTE_PWA.payOn());
-const payNote = demo => (PAY() ? `<p class="demo">Paiement unique et sécurisé avec Stripe. <a href="carnet.html#offre">Déjà payé ? Retrouver mon achat</a></p>` : `<p class="demo">${demo}</p>`);
+const needConsent = () => !!(window.FONTE_PWA && window.FONTE_PWA.needsConsent && window.FONTE_PWA.needsConsent());
+const payNote = demo => (PAY() ? `<p class="demo">Paiement unique et sécurisé avec Stripe. <a href="carnet.html#offre">Déjà payé ? Retrouver mon achat</a></p>`
+  : window.FONTE_PWA ? `<p class="demo">Paiement en ligne bientôt disponible.</p>` : `<p class="demo">${demo}</p>`);
 
 const prof = () => (plan ? plan.from : state);
 function snapshot() { return { v: 2, state, plan, unlocked, nutri, chat: chat.filter(m => !m.pending).slice(-40), freeUsed, edits: edits.slice(-30), tab }; }
@@ -570,9 +572,10 @@ $("#result").addEventListener("click", e => {
   else if (act === "stage") setStage(+b.dataset.n);
   else if (act === "askex") { const x = plan.sessions[+b.dataset.s].ex[+b.dataset.i]; coachAsk(`Explique-moi l'exercice « ${x.n} » (séance ${+b.dataset.s + 1}) : technique détaillée, erreurs à éviter, comment progresser, et une alternative si ça me gêne.`, { display: `Explique-moi l'exercice « ${x.n} »` }); }
   else if (act === "unlock") {
-    if (!PAY()) { unlocked = true; renderAll(); save(); toast("Version complète débloquée."); return; }
-    b.disabled = true; b.textContent = "Ouverture du paiement…";
-    window.FONTE_PWA.buy("fonte").catch(() => { b.disabled = false; b.textContent = "Débloquer pour 19 €"; toast("Le paiement n'a pas pu s'ouvrir. Vérifie ta connexion et réessaie."); });
+    // appli installée : jamais de déblocage gratuit ; récapitulatif et accord exprès avant la page de paiement
+    if (PAY()) window.FONTE_PWA.checkout("fonte");
+    else if (window.FONTE_PWA) toast("Le paiement en ligne arrive bientôt : reviens dans quelques jours.");
+    else { unlocked = true; renderAll(); save(); toast("Version complète débloquée."); }
   }
   else if (act === "analyse") coachAsk(ANALYSE, { display: "Analyse complète de mon programme", deep: true });
   else if (act === "combler") coachAsk("Mon volume est sous la cible pour certains muscles. Ajoute ce qu'il faut (2 à 3 séries d'isolation au bon endroit) sans dépasser ma durée de séance, et explique ton choix.", { display: "Comble les muscles sous la cible" });
@@ -614,9 +617,12 @@ function renderCoachShell() {
     denied: "<b>Le coach est en pause pour cette visite.</b><span class=\"muted\">Fonte n'a pas l'autorisation d'utiliser Claude. Recharge la page et accepte la demande pour le réactiver.</span>",
     disabled: "<b>Claude n'est pas disponible pour ce compte.</b><span class=\"muted\">Le reste de l'application fonctionne normalement.</span>"
   };
-  const isOff = coachState in msgs;
+  const consent = coachState === "ready" && needConsent();
+  const isOff = coachState in msgs || consent;
   off.hidden = !isOff;
-  if (isOff) off.innerHTML = msgs[coachState];
+  off.classList.toggle("bare", consent);
+  if (consent) off.innerHTML = window.FONTE_PWA.consentHTML();
+  else if (isOff) off.innerHTML = msgs[coachState];
   form.hidden = isOff;
   sugg.hidden = isOff || busy;
   $("#coach-send").disabled = coachState !== "ready" || busy;
@@ -644,7 +650,7 @@ function renderSugg() {
     { l: "Quels compléments valent vraiment le coup ?", q: "Quels compléments valent vraiment le coup pour moi ?", o: {} }
   ].filter(Boolean);
   box.innerHTML = SUGG_CUR.map((s, i) => `<button type="button" data-act="sugg" data-i="${i}">${esc(s.l)}</button>`).join("");
-  box.hidden = coachState !== "ready" || busy;
+  box.hidden = coachState !== "ready" || busy || needConsent();
 }
 function md(src) {
   const inline = s => esc(s)
@@ -970,11 +976,11 @@ function setBusy(b) {
 }
 function coachAsk(text, opts = {}) {
   selectTab("coach");
-  if (coachState !== "ready") { renderCoachShell(); return; }
+  if (coachState !== "ready" || needConsent()) { renderCoachShell(); return; }
   ask(text, opts);
 }
 async function ask(text, opts = {}) {
-  if (busy || coachState !== "ready" || !plan) return;
+  if (busy || coachState !== "ready" || !plan || needConsent()) return;
   if (!unlocked && freeUsed >= FREE_Q) { renderLog(); toComposer(); return; }
   const deep = opts.deep != null ? opts.deep : $("#coach-deep").checked;
   chat.push({ role: "user", content: text, display: opts.display });
@@ -1015,6 +1021,7 @@ function handleErr(e, msg, text, opts) {
   else if (code === "daily_limit") { msg.content = e.text || ""; msg.note = "Tu as posé beaucoup de questions aujourd'hui : le coach reprend demain."; }
   else if (code === "overloaded") { msg.content = e.text || msg.content || ""; msg.note = "Le coach est très demandé en ce moment. Réessaie dans un instant."; msg.retry = retry; }
   else if (code === "coach_off") { chat.splice(chat.indexOf(msg) - 1, 2); coachState = "absent"; renderCoachShell(); }
+  else if (code === "consent_required") { chat.splice(chat.indexOf(msg) - 1, 2); renderCoachShell(); }
   else if (code === "session_expired") { msg.content = e.text || ""; msg.note = "Ta session Claude a expiré : reconnecte-toi, puis réessaie."; msg.retry = retry; }
   else if (code === "refused") { msg.content = ""; msg.note = "Le coach ne peut pas répondre à cette demande. Reformule-la autrement."; }
   else if (code === "empty_completion") { msg.note = "Pas de réponse cette fois. Reformule ou simplifie ta question."; }
@@ -1036,7 +1043,7 @@ $("#coach-stop").addEventListener("click", () => { if (ctl) ctl.abort(); });
 $("#coach-reset").addEventListener("click", () => { if (busy && ctl) ctl.abort(); chat = []; renderLog(); renderSugg(); save(); $("#coach-input").focus(); });
 
 /* ===== Export PDF ===== */
-const JSPDF_URL = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+const JSPDF_URL = window.FONTE_PWA ? "vendor/jspdf.umd.min.js" : "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
 function loadJsPDF() {
   if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
   return new Promise((res, rej) => {
@@ -1175,6 +1182,7 @@ function syncAccess() {
   if (unlocked !== was) { if (plan) renderAll(); save(); }
 }
 addEventListener("fonte:config", syncAccess);
+addEventListener("fonte:accord", () => { renderCoachShell(); renderSugg(); if (!needConsent() && tab === "coach") { const i = $("#coach-input"); if (i) i.focus(); } });
 addEventListener("fonte:acces", e => {
   syncAccess();
   const d = e.detail || {};

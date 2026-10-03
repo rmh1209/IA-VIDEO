@@ -727,6 +727,7 @@ function renderProgress() {
     <div class="card"><h2>Records</h2><div class="tbl"><table><thead><tr><th>Exercice</th><th class="n">Force estimée</th><th class="n">Meilleure série</th><th class="n">Date</th></tr></thead><tbody>${records.slice(0, 15).map(r => `<tr><td>${esc(r.n)}</td><td class="n">${f1(r.best.e)} kg</td><td class="n">${f1(r.best.w)} × ${r.best.r}</td><td class="n">${dateFr(r.when, { day: "numeric", month: "short" })}</td></tr>`).join("")}</tbody></table></div></div>
     <div class="ai" id="ai-box"><div class="sechead"><h2>Analyse du coach</h2><span class="muted small">même expertise que le coach Fonte</span></div>
       <p class="muted small">Le coach lit tes 8 dernières semaines : ce qui progresse, ce qui stagne, et tes ajustements pour les deux prochaines semaines.</p>
+      ${ai.consent && window.FONTE_PWA && window.FONTE_PWA.needsConsent() ? window.FONTE_PWA.consentHTML("Avant l'analyse de tes séances") : ""}
       <div class="txt" id="ai-txt">${ai.text ? md(ai.text) : ""}</div>${ai.note ? `<p class="note">${esc(ai.note)}</p>` : ""}
       <div class="row"><button type="button" class="primary" data-act="ai" id="ai-btn"${!real || ai.busy ? " disabled" : ""}>${ai.text ? "Relancer l'analyse" : "Analyser mes progrès"}</button>${ai.busy ? `<button type="button" class="btn2" data-act="ai-stop">Arrêter</button>` : ""}${!real ? `<span class="muted small">Disponible avec tes vraies séances.</span>` : ""}</div></div>
   </div>${isPro() ? "" : `<div class="gatemsg"><div><b>Courbes, records, séries par muscle et analyse du coach</b><span class="muted small">Inclus dans Premium${hasBundle() ? ` à ${PRICE.bundle} par mois avec ton programme` : ""}.</span><button type="button" class="unlock" data-act="go-offre">Voir l'offre</button></div></div>`}</section>`;
@@ -752,11 +753,24 @@ function accessHTML() {
       <label for="restore-in" class="small"><b>Ton code d'accès</b></label><textarea id="restore-in" class="code" placeholder="Colle ici ton code d'accès Fonte"></textarea>
       <div class="row"><button type="button" class="btn2" data-act="restore">Retrouver mes achats</button></div></details></section>`;
 }
-function busyBtn(b, label) { const old = b.textContent; b.disabled = true; b.textContent = label; return () => { b.disabled = false; b.textContent = old; }; }
-function buyPremium(b) {
-  const undo = busyBtn(b, "Ouverture du paiement…");
-  window.FONTE_PWA.buy("premium").catch(() => { undo(); toast("Le paiement n'a pas pu s'ouvrir. Vérifie ta connexion et réessaie."); });
+function premiumStatusHTML(until) {
+  const c = window.FONTE_PWA.cancelInfo(), d = t => dateFr(t, { day: "numeric", month: "long", year: "numeric" });
+  if (c && c.fin) return `<p class="small"><b>Résiliation enregistrée</b> : Premium reste actif jusqu'au ${d(c.fin)}, sans autre prélèvement.</p><button type="button" class="btn2" data-act="portal">Gérer mon abonnement</button>`;
+  return `<p class="small"><b>Actif</b>${until ? `, prochain renouvellement le ${d(until)}` : ""}.</p>
+    <div class="row"><button type="button" class="btn2" data-act="portal">Gérer mon abonnement</button><button type="button" class="btn2 danger" data-act="resilier">Résilier mon abonnement</button></div>
+    <p class="muted small">Gérer : changer de carte, voir tes factures. Résilier : sans frais, effet à la fin du mois payé.</p>`;
 }
+/* tes données : tout est sur ce téléphone ; export (portabilité), sauvegarde, effacement, accord pour le coach */
+function dataHTML() {
+  if (!window.FONTE_PWA) return "";
+  const F = window.FONTE_PWA, c = F.consentInfo();
+  return `<div class="datatools">
+    <p class="small"><b>Coach IA</b> : ${c ? `accord donné le ${dateFr(c.t, { day: "numeric", month: "long", year: "numeric" })}. <button type="button" class="linkbtn" data-act="accord-off">Retirer mon accord</button>` : "pas d'accord donné : le coach ne reçoit rien de toi."}</p>
+    <div class="row"><button type="button" class="btn2" data-act="data-export">Télécharger toutes mes données</button><label class="btn2 filebtn">Importer une sauvegarde<input type="file" accept="application/json,.json" id="data-import" hidden></label></div>
+    <div class="row"><button type="button" class="btn2 danger" data-act="data-erase">Supprimer toutes mes données de ce téléphone</button></div>
+    <p class="muted small">Identifiant de cet appareil (utile si tu nous écris au sujet de tes données) : <code>${esc(F.device())}</code>. <a href="legal/confidentialite.html">Confidentialité</a></p></div>`;
+}
+function busyBtn(b, label) { const old = b.textContent; b.disabled = true; b.textContent = label; return () => { b.disabled = false; b.textContent = old; }; }
 function openPortal(b) {
   const undo = busyBtn(b, "Ouverture…");
   window.FONTE_PWA.portal().catch(() => { undo(); toast("La gestion de l'abonnement n'a pas pu s'ouvrir. Réessaie dans un moment."); });
@@ -779,6 +793,15 @@ async function restoreAccess(b) {
   }
 }
 addEventListener("fonte:config", () => { if (PAY()) render(); });
+addEventListener("fonte:accord", e => { if (e.detail && e.detail.ok && ai.consent) { ai.consent = false; render(); runAnalysis(); } else render(); });
+document.addEventListener("change", e => {
+  if (e.target.id !== "data-import" || !e.target.files[0]) return;
+  const f = e.target.files[0];
+  openConfirm("Remplacer les données de ce téléphone par cette sauvegarde ?", "Importer", () => {
+    window.FONTE_PWA.importAll(f).then(() => location.reload()).catch(() => { closeSheet(); toast("Ce fichier n'est pas une sauvegarde Fonte."); });
+  });
+  e.target.value = "";
+});
 addEventListener("fonte:acces", e => {
   const d = e.detail || {};
   render();
@@ -800,15 +823,15 @@ function renderOffre() {
       <div class="price">${bundle ? PRICE.bundle : PRICE.premium} <small>par mois</small> ${bundle ? `<span class="old">${PRICE.premium}</span>` : ""}</div>
       <ul><li>Conseil de charge à chaque exercice (double progression)</li><li>Courbes de force estimée et records</li><li>Séries par muscle comparées à ta cible</li><li>Analyse de tes progrès par le coach IA</li><li>Historique illimité</li></ul>
       ${bundle ? "" : `<p class="muted small">${PRICE.bundle} par mois si tu as débloqué ton programme dans Fonte.</p>`}
-      ${pro ? (pay ? `<p class="small"><b>Actif</b>${until ? `, prochain renouvellement le ${dateFr(until, { day: "numeric", month: "long" })}` : ""}.</p><button type="button" class="btn2" data-act="portal">Gérer mon abonnement</button><p class="muted small">Changer de carte, voir tes factures ou résilier sans frais (effet à la fin du mois payé).</p>` : "")
-        : `<button type="button" class="unlock" data-act="plan-pro">Passer à Premium (${bundle ? PRICE.bundle : PRICE.premium} / mois)</button><p class="muted small">${pay ? "Sans engagement, résiliable à tout moment. Paiement sécurisé avec Stripe." : "Mode démo : activation sans paiement. En production, ce bouton ouvre la page d'abonnement."}</p>`}</div>
+      ${pro ? (pay ? premiumStatusHTML(until) : "")
+        : `<button type="button" class="unlock" data-act="plan-pro">Passer à Premium (${bundle ? PRICE.bundle : PRICE.premium} / mois)</button><p class="muted small">${pay ? "Sans engagement, résiliable à tout moment en trois clics. Paiement sécurisé avec Stripe." : window.FONTE_PWA ? "Abonnement en ligne bientôt disponible." : "Mode démo : activation sans paiement. En production, ce bouton ouvre la page d'abonnement."}</p>`}</div>
   </section>${accessHTML()}
   <section class="card" style="display:grid;gap:10px"><h2>Ton programme Fonte</h2>
     ${P ? `<p><b>${esc(LABEL.goal[st.goal])}</b> · ${esc(LABEL.level[st.level])} · ${P.sessions.length} séances · ${esc(LABEL.eq[st.eq])}${st.pain && st.pain.length ? ` · ménage : ${st.pain.map(z => ZONES[z].toLowerCase()).join(", ")}` : ""}</p><p class="muted small">Importé le ${dateFr(profile.importedAt || Date.now(), { day: "numeric", month: "long", year: "numeric" })}${P.paid ? " · programme débloqué, offre −50 % active" : " · programme gratuit : débloque-le dans Fonte pour obtenir −50 % sur Premium"}.</p>` : `<p class="muted">Tu utilises le programme d'exemple. Importe le tien : dans Fonte, onglet Programme, touche « Ouvrir Fonte Suivi avec mon programme », ou copie le code et colle-le ici.</p>`}
     <label for="code-in" class="small"><b>Code de programme Fonte</b></label><textarea id="code-in" class="code" placeholder="Colle ici le code copié dans Fonte (il commence par F1)"></textarea>
     <div class="row"><button type="button" class="primary" data-act="import-code">Importer</button><a href="${FONTE_URL}"${window.FONTE_PWA ? "" : ' target="_blank" rel="noopener"'}>Ouvrir Fonte</a></div></section>
   <section class="card" style="display:grid;gap:10px"><h2>Tes données</h2><p class="muted small">${storeMode === "db" ? "Tes séances sont enregistrées sur ton compte et synchronisées entre tes appareils. Elles ne sont visibles que par toi." : "Tes séances sont enregistrées sur cet appareil."} ${workouts.length} séance${workouts.length > 1 ? "s" : ""} enregistrée${workouts.length > 1 ? "s" : ""}.</p>
-    <div class="row"><button type="button" class="btn2" data-act="csv" id="csv-btn"${runtimeDone && !downloads ? " hidden" : ""}>Exporter mes séances (CSV)</button><button type="button" class="btn2" data-act="wipe">Tout effacer</button></div></section>`;
+    <div class="row"><button type="button" class="btn2" data-act="csv" id="csv-btn"${runtimeDone && !downloads ? " hidden" : ""}>Exporter mes séances (CSV)</button><button type="button" class="btn2" data-act="wipe">Effacer mes séances</button></div>${dataHTML()}</section>`;
 }
 
 /* ===== Analyse du coach (IA) ===== */
@@ -858,6 +881,7 @@ function analysisData() {
 }
 async function runAnalysis() {
   if (ai.busy) return;
+  if (window.FONTE_PWA && window.FONTE_PWA.needsConsent() && sample) { ai.consent = true; renderProgress(); return; }
   if (!sample) { ai.note = window.FONTE_PWA ? "L'analyse du coach arrive bientôt dans l'appli." : "L'analyse du coach n'est pas disponible dans cette vue (connexion à Claude nécessaire)."; renderProgress(); return; }
   const relaunch = !!ai.text;
   ai.busy = true; ai.text = ""; ai.note = ""; ai.ctl = new AbortController();
@@ -875,6 +899,7 @@ async function runAnalysis() {
     ai.note = { cancelled: "Analyse arrêtée.", not_granted: "Tu n'as pas autorisé la page à utiliser Claude pour cette visite.", sampling_disabled: "Claude n'est pas disponible pour ce compte.", rate_limited: "Trop de demandes ou limite d'utilisation atteinte : réessaie plus tard.", session_expired: "Ta session Claude a expiré : reconnecte-toi puis relance.", refused: "Le coach n'a pas pu produire cette analyse.", prompt_too_large: "Trop de données à analyser d'un coup.", premium_required: "L'analyse du coach fait partie de Premium.", daily_limit: "Tu as lancé beaucoup d'analyses aujourd'hui : réessaie demain.", overloaded: "Le coach est très demandé en ce moment : réessaie dans un instant.", coach_off: "L'analyse du coach n'est pas disponible pour le moment.", empty_completion: "Pas d'analyse cette fois : relance-la." }[code] || "Analyse interrompue (problème de connexion). Réessaie.";
     if (window.FONTE_PWA && code === "rate_limited") ai.note = "Trop de demandes d'un coup : réessaie dans un moment.";
     if (code === "premium_required" && PAY()) window.FONTE_PWA.refresh(true);
+    if (code === "consent_required") { ai.note = ""; ai.consent = true; }
     if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(code)) sample = null;
   } finally {
     ai.busy = false; ai.ctl = null;
@@ -953,9 +978,13 @@ document.addEventListener("click", e => {
     case "demo-off": demo = null; detailId = null; render(); break;
     case "ai": runAnalysis(); break;
     case "ai-stop": if (ai.ctl) ai.ctl.abort(); break;
-    case "plan-pro": if (PAY()) { buyPremium(b); break; } profile.plan = "premium"; saveProfile(); render(); toast(profile.bundle ? `Premium activé à ${PRICE.bundle} par mois (démo).` : "Premium activé (démo)."); break;
+    case "plan-pro": if (PAY()) { window.FONTE_PWA.checkout("premium"); break; } if (window.FONTE_PWA) { toast("L'abonnement en ligne arrive bientôt."); break; } profile.plan = "premium"; saveProfile(); render(); toast(profile.bundle ? `Premium activé à ${PRICE.bundle} par mois (démo).` : "Premium activé (démo)."); break;
     case "plan-free": if (PAY()) { openPortal(b); break; } profile.plan = "free"; saveProfile(); render(); break;
     case "portal": openPortal(b); break;
+    case "resilier": window.FONTE_PWA.cancelFlow(); break;
+    case "data-export": window.FONTE_PWA.exportAll().then(() => toast("Tes données sont téléchargées (fichier JSON).")).catch(() => toast("Le téléchargement n'a pas pu se faire.")); break;
+    case "data-erase": openConfirm("Supprimer toutes tes données de ce téléphone : programme, séances, conversations, accord et achats ? Copie d'abord ton code d'accès si tu as acheté quelque chose. C'est définitif.", "Tout supprimer", () => { window.FONTE_PWA.eraseAll(); location.reload(); }); break;
+    case "accord-off": window.FONTE_PWA.withdrawConsent(); toast("Accord retiré : le coach ne recevra plus rien de toi."); break;
     case "code-copy": copyAccess(); break;
     case "restore": restoreAccess(b); break;
     case "import-code": { const v = $("#code-in").value; if (!v.trim()) { toast("Colle d'abord le code copié dans Fonte."); return; } importCode(v); break; }

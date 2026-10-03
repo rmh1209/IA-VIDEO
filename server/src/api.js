@@ -21,8 +21,17 @@ const ipOf = async request => {
 };
 const today = () => new Date().toISOString().slice(0, 10);
 
+/* éditeur : mentions légales obligatoires pour vendre ; en mode réel, pas de paiement tant qu'elles manquent */
+export const EDITEUR = { nom: "EDITEUR_NOM", statut: "EDITEUR_STATUT", adresse: "EDITEUR_ADRESSE", email: "EDITEUR_EMAIL", telephone: "EDITEUR_TELEPHONE", siret: "EDITEUR_SIRET", rcs: "EDITEUR_RCS", tva: "EDITEUR_TVA", directeur: "EDITEUR_DIRECTEUR", mediateur: "MEDIATEUR_NOM", mediateurSite: "MEDIATEUR_SITE" };
+const REQUIRED = ["nom", "statut", "adresse", "email", "telephone", "siret", "tva", "directeur", "mediateur", "mediateurSite"];
+export const editeurOf = env => Object.fromEntries(Object.entries(EDITEUR).map(([k, v]) => [k, String(env[v] || "").trim()]));
+export const legalComplete = env => { const e = editeurOf(env); return REQUIRED.every(k => e[k]); };
+const liveMode = env => /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY || "");
+
 const coachReady = env => !!(env.ANTHROPIC_API_KEY && env.QUOTAS);
-const payReady = env => !!(env.STRIPE_SECRET_KEY && env.ACCESS_SECRET && env.STRIPE_PRICE_FONTE && env.STRIPE_PRICE_PREMIUM && env.STRIPE_PRICE_PREMIUM_REDUIT && env.QUOTAS);
+const payReady = env => !!(env.STRIPE_SECRET_KEY && env.ACCESS_SECRET && env.STRIPE_PRICE_FONTE && env.STRIPE_PRICE_PREMIUM && env.STRIPE_PRICE_PREMIUM_REDUIT && env.QUOTAS)
+  && (!liveMode(env) || legalComplete(env));
+const parisDate = () => { try { return new Date().toLocaleString("fr-FR", { timeZone: "Europe/Paris", dateStyle: "long", timeStyle: "short" }); } catch (e) { return new Date().toISOString(); } };
 
 async function readJson(request, max) {
   if ((+request.headers.get("content-length") || 0) > max) throw new RequestError("prompt_too_large", 413);
@@ -43,6 +52,7 @@ async function coach(request, env, ctx) {
   if (!coachReady(env)) return fail("coach_off", 503);
   const body = await readJson(request, 300000);
   const req = validate(body);
+  if (body.consentement !== 1) throw new RequestError("consent_required", 400);
   if (!DEVICE.test(String(body.device || ""))) throw bad("identifiant d'appareil");
   const access = await accessOf(env, body.acces);
   const q = await takeQuota(env, { kind: req.kind, newQuestion: req.newQuestion, device: body.device, ip: await ipOf(request), access });
@@ -87,20 +97,27 @@ async function premiumToken(env, sub) {
   if (!sub || !ACTIVE.includes(sub.status)) return { jeton: null, statut: "termine" };
   const end = periodEnd(sub) * 1000 || Date.now() + 32 * DAY, exp = end + GRACE;
   const cus = typeof sub.customer === "string" ? sub.customer : sub.customer && sub.customer.id;
-  return { jeton: await signToken({ p: "premium", id: sub.id, cus: cus || null, exp }, env.ACCESS_SECRET), exp, statut: "actif" };
+  return { jeton: await signToken({ p: "premium", id: sub.id, cus: cus || null, exp }, env.ACCESS_SECRET), exp, statut: "actif", resilie: !!(sub.cancel_at_period_end || sub.cancel_at), fin: end };
 }
 
 async function checkout(request, env) {
   const body = await readJson(request, 8000);
   const produit = body.produit === "fonte" || body.produit === "premium" ? body.produit : null;
   if (!produit) throw bad("produit");
-  const base = originOf(request), acc = await accessOf(env, body.acces);
-  const common = { locale: "fr", allow_promotion_codes: true, metadata: { produit }, custom_text: { submit: { message: RENONCIATION } } };
+  if (body.accord !== true) throw new RequestError("consent_required", 400);
+  const base = originOf(request), acc = await accessOf(env, body.acces), le = parisDate();
+  const accord = produit === "fonte"
+    ? `Accès immédiat au contenu numérique demandé le ${le}, avec renonciation expresse au droit de rétractation (article L221-28, 13°, du Code de la consommation).`
+    : `Exécution immédiate de l'abonnement demandée le ${le} : en cas de rétractation dans les 14 jours, seule la période écoulée est due (article L221-25 du Code de la consommation).`;
+  const metadata = { produit, accord_immediat: "oui", accord_le: new Date().toISOString() };
+  const common = { locale: "fr", allow_promotion_codes: true, metadata, custom_text: { submit: { message: produit === "fonte" ? RENONCIATION : "Abonnement mensuel sans engagement, résiliable à tout moment depuis l'appli (Offre > Résilier mon abonnement)." } } };
   const params = produit === "fonte"
-    ? { ...common, mode: "payment", customer_creation: "always", line_items: [{ price: env.STRIPE_PRICE_FONTE, quantity: 1 }],
+    ? { ...common, mode: "payment", submit_type: "pay", customer_creation: "always", line_items: [{ price: env.STRIPE_PRICE_FONTE, quantity: 1 }],
+        payment_intent_data: { description: "Fonte · programme complet (accès immédiat)", metadata },
+        invoice_creation: env.STRIPE_FACTURES === "non" ? null : { enabled: true, invoice_data: { description: "Fonte · programme complet", footer: accord, metadata } },
         success_url: `${base}/index.html?achat={CHECKOUT_SESSION_ID}`, cancel_url: `${base}/index.html?achat=annule` }
     : { ...common, mode: "subscription", line_items: [{ price: acc.fonte ? env.STRIPE_PRICE_PREMIUM_REDUIT : env.STRIPE_PRICE_PREMIUM, quantity: 1 }],
-        subscription_data: { metadata: { produit, reduit: acc.fonte ? "oui" : "non" } },
+        subscription_data: { description: `Fonte Suivi Premium, mensuel sans engagement. ${accord}`, metadata: { ...metadata, reduit: acc.fonte ? "oui" : "non" } },
         success_url: `${base}/carnet.html?achat={CHECKOUT_SESSION_ID}#offre`, cancel_url: `${base}/carnet.html?achat=annule#offre` };
   const s = await stripe(env, "POST", "/v1/checkout/sessions", params);
   return json({ url: s.url });
@@ -139,10 +156,22 @@ async function accessCheck(request, env) {
       try { sub = await stripe(env, "GET", `/v1/subscriptions/${encodeURIComponent(p.id)}`); }
       catch (e) { if (e.status !== 404) throw e; }
       const r = await premiumToken(env, sub);
-      Object.assign(out, { premium: r.jeton, statut: r.statut, exp: r.exp || null });
+      Object.assign(out, { premium: r.jeton, statut: r.statut, exp: r.exp || null, resilie: !!r.resilie, fin: r.fin || null });
     }
   }
   return json(out);
+}
+
+/* résiliation (article L215-1-1 du Code de la consommation) : fin de l'abonnement à l'échéance payée, sans autre prélèvement */
+async function cancel(request, env) {
+  const body = await readJson(request, 4000);
+  const p = await readToken(body.jeton, env.ACCESS_SECRET, { allowExpired: true });
+  if (!p || p.p !== "premium") return fail("invalid_token", 400);
+  let sub = await stripe(env, "GET", `/v1/subscriptions/${encodeURIComponent(p.id)}`);
+  if (!ACTIVE.includes(sub.status)) return fail("already_ended", 409);
+  if (!sub.cancel_at_period_end) sub = await stripe(env, "POST", `/v1/subscriptions/${encodeURIComponent(p.id)}`, { cancel_at_period_end: true, metadata: { resiliation_le: new Date().toISOString(), resiliation_par: "appli" } });
+  const e = editeurOf(env);
+  return json({ statut: "resilie", le: Date.now(), fin: periodEnd(sub) * 1000 || null, ref: sub.id, editeur: { nom: e.nom, email: e.email } });
 }
 
 /* portail client Stripe : changer de carte, factures, résiliation */
@@ -154,12 +183,12 @@ async function portal(request, env) {
   return json({ url: s.url });
 }
 
-const PAY = { "/api/checkout": checkout, "/api/checkout/confirm": confirm, "/api/access": accessCheck, "/api/portal": portal };
+const PAY = { "/api/checkout": checkout, "/api/checkout/confirm": confirm, "/api/access": accessCheck, "/api/portal": portal, "/api/resiliation": cancel };
 
 export async function handleApi(request, env, ctx) {
   const path = new URL(request.url).pathname;
   try {
-    if (path === "/api/config") return request.method === "GET" ? json({ coach: coachReady(env), paiement: payReady(env), questions: limits(env).freeQuestions }) : fail("method_not_allowed", 405);
+    if (path === "/api/config") return request.method === "GET" ? json({ coach: coachReady(env), paiement: payReady(env), legal: legalComplete(env), questions: limits(env).freeQuestions }) : fail("method_not_allowed", 405);
     if (!(path === "/api/coach" || PAY[path])) return fail("not_found", 404);
     if (request.method !== "POST") return fail("method_not_allowed", 405);
     // l'API ne sert que l'appli : refuse les requêtes envoyées depuis un autre site

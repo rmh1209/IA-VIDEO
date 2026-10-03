@@ -1,6 +1,7 @@
 // De bout en bout : l'appli servie par le vrai serveur (workerd), dans un navigateur, avec le faux Claude et le faux Stripe
 import { createRequire } from "node:module";
 import path from "node:path";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { startStack, BASE } from "./srv/harness.mjs";
 const require = createRequire(import.meta.url);
@@ -23,7 +24,7 @@ const stack = await startStack();
 const claude = stack.mocks.state.claude;
 const browser = await chromium.launch();
 try {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, acceptDownloads: true });
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
   const page = await ctx.newPage();
   await quiet(page, "programme");
@@ -33,8 +34,15 @@ try {
   await page.waitForSelector("#panel-prog .day");
   await page.click("#tab-coach");
   await page.waitForFunction(() => coachState === "ready", null, { timeout: 10000 });
-  const shell = await page.evaluate(() => ({ off: document.querySelector("#coach-off").hidden, quota: document.querySelector("#coach-quota").textContent, pay: FONTE_PWA.payOn(), coach: FONTE_PWA.coachOn() }));
-  check("coach_disponible", shell.off && shell.pay && shell.coach && shell.quota === "3 questions offertes", shell);
+  const gate = await page.evaluate(() => ({ consent: !!document.querySelector("#coach-off .pwa-consent"), form: document.querySelector("#coach-form").hidden, sugg: document.querySelector("#coach-sugg").hidden, btn: document.querySelector("[data-pwa-consent]").disabled, txt: document.querySelector(".pwa-consent").textContent }));
+  check("accord_avant_le_coach", gate.consent && gate.form && gate.sugg && gate.btn && /intelligence artificielle/.test(gate.txt) && /15 ans/.test(gate.txt) && /santé/.test(gate.txt), gate);
+  await page.screenshot({ path: path.join(DIR, "serveur-accord.png") });
+  const callsBefore = claude.length;
+  await page.check("[data-pwa-consent-box]");
+  await page.click("[data-pwa-consent]");
+  await page.waitForSelector("#coach-form:not([hidden])");
+  const shell = await page.evaluate(() => ({ off: document.querySelector("#coach-off").hidden, quota: document.querySelector("#coach-quota").textContent, pay: FONTE_PWA.payOn(), coach: FONTE_PWA.coachOn(), accord: JSON.parse(localStorage.getItem("fonte.accord.coach")) }));
+  check("coach_disponible", shell.off && shell.pay && shell.coach && shell.quota === "3 questions offertes" && shell.accord && shell.accord.v === 1 && claude.length === callsBefore, shell);
 
   // 1re question : réponse diffusée, cerveau dans le prompt système, contexte en premier message
   await page.fill("#coach-input", "Bonjour coach, tu peux m'aider ?");
@@ -87,7 +95,14 @@ try {
 
   // paiement du programme : page Stripe, retour, déblocage
   await page.click("#coach-log .paywall .unlock");
+  await page.waitForSelector(".pwa-box [data-buy]");
+  const sheetFonte = await page.evaluate(() => ({ txt: document.querySelector(".pwa-box").textContent, disabled: document.querySelector("[data-buy]").disabled, cgv: document.querySelector('.pwa-box a[href="legal/conditions.html"]') !== null }));
+  await page.screenshot({ path: path.join(DIR, "serveur-feuille-achat.png") });
+  await page.check("[data-buy-ok]");
+  await page.click("[data-buy]");
   await page.waitForURL(/127\.0\.0\.1:8793\/payer\//);
+  const coFonte = stack.mocks.state.stripe.filter(x => x.path === "/v1/checkout/sessions").at(-1).body;
+  check("feuille_achat_accord", sheetFonte.disabled && sheetFonte.cgv && /19 € TTC/.test(sheetFonte.txt) && /droit de rétractation/.test(sheetFonte.txt) && coFonte["metadata[accord_immediat]"] === "oui" && coFonte["invoice_creation[enabled]"] === "true" && /L221-28/.test(coFonte["invoice_creation[invoice_data][footer]"]) && coFonte.submit_type === "pay", { sheetFonte, coFonte });
   const price = await page.textContent("#prix");
   await page.click("#payer");
   await page.waitForURL(u => u.href.startsWith(BASE + "/index.html"));
@@ -121,7 +136,13 @@ try {
   check("copier_code_acces", clip === paid.code && clip.length > 100, clip.length);
   await page.screenshot({ path: path.join(DIR, "serveur-offre.png"), fullPage: true });
   await page.click('[data-act="plan-pro"]');
+  await page.waitForSelector(".pwa-box [data-buy]");
+  const sheetPrem = await page.evaluate(() => document.querySelector(".pwa-box").textContent);
+  await page.check("[data-buy-ok]");
+  await page.click("[data-buy]");
   await page.waitForURL(/127\.0\.0\.1:8793\/payer\//);
+  const coPrem = stack.mocks.state.stripe.filter(x => x.path === "/v1/checkout/sessions").at(-1).body;
+  check("feuille_premium_accord", /2,49 € TTC/.test(sheetPrem) && /trois clics/.test(sheetPrem) && /L221-25/.test(coPrem["subscription_data[description]"]) && coPrem["metadata[accord_immediat]"] === "oui", { sheetPrem, coPrem });
   const pprice = await page.textContent("#prix");
   await page.click("#payer");
   await page.waitForURL(u => u.href.startsWith(BASE + "/carnet.html"));
@@ -153,6 +174,35 @@ try {
   await page.click("#retour");
   await page.waitForURL(u => u.href.startsWith(BASE + "/carnet.html"));
   check("portail_client", /^cus_test_/.test(cus) && (await page.evaluate(() => view)) === "offre", cus);
+
+  // résiliation en trois clics : Offre > Résilier mon abonnement > Confirmer, confirmation téléchargeable
+  await page.click('[data-act="resilier"]');
+  await page.waitForSelector("[data-cancel-ok]");
+  await page.click("[data-cancel-ok]");
+  await page.waitForSelector("[data-cancel-proof]");
+  const conf = await page.textContent(".pwa-box");
+  const [proof] = await Promise.all([page.waitForEvent("download"), page.click("[data-cancel-proof]")]);
+  const proofTxt = fs.readFileSync(await proof.path(), "utf8");
+  await page.click(".pwa-box [data-sheet-close]");
+  await page.waitForTimeout(150);
+  const afterCancel = await page.evaluate(() => ({ card: document.querySelector(".plancard.best, .plancard:last-child").textContent, btn: !!document.querySelector('[data-act="resilier"]'), premium: FONTE_PWA.has("premium") }));
+  const subNow = Object.values(stack.mocks.state.subs).at(-1);
+  check("resiliation_trois_clics", /Résiliation enregistrée/.test(conf) && /Fin de l'abonnement/.test(proofTxt) && /Camille Martin/.test(proofTxt) && proof.suggestedFilename().startsWith("fonte-confirmation-resiliation-")
+    && subNow.cancel_at_period_end === true && /Résiliation enregistrée/.test(afterCancel.card) && !afterCancel.btn && afterCancel.premium, { conf, proofTxt, afterCancel, sub: subNow.cancel_at_period_end });
+
+  // tes données : export complet (portabilité), puis retrait de l'accord pour le coach
+  const [exp] = await Promise.all([page.waitForEvent("download"), page.click('[data-act="data-export"]')]);
+  const dumpPath = await exp.path(), dump = JSON.parse(fs.readFileSync(dumpPath, "utf8"));
+  check("export_donnees", dump.appli === "fonte" && !!dump.donnees["fonte.v2"] && !!dump.donnees["fonte-suivi.v1"] && !!dump.donnees["fonte.acces.premium"] && exp.suggestedFilename().startsWith("fonte-mes-donnees-"), Object.keys(dump.donnees || {}));
+  await page.click('[data-act="accord-off"]');
+  await page.waitForTimeout(100);
+  check("retrait_accord", (await page.evaluate(() => localStorage.getItem("fonte.accord.coach"))) === null && /pas d'accord donné/.test(await page.textContent(".datatools")));
+
+  // pages légales servies par le serveur : informations de l'éditeur renseignées, politique de sécurité stricte
+  const hIndex = await fetch(BASE + "/index.html"), hLegal = await fetch(BASE + "/legal/conditions.html");
+  await page.goto(BASE + "/legal/conditions.html");
+  const lg = await page.evaluate(() => ({ todo: document.querySelectorAll(".todo").length, txt: document.body.textContent }));
+  check("pages_legales_serveur", lg.todo === 0 && lg.txt.includes("Camille Martin") && lg.txt.includes("Médiateur de test") && /connect-src 'self'/.test(hIndex.headers.get("content-security-policy") || "") && /frame-ancestors 'none'/.test(hLegal.headers.get("content-security-policy") || ""), { todo: lg.todo, csp: hIndex.headers.get("content-security-policy") });
 
   // paiement annulé
   await page.goto(BASE + "/index.html");
@@ -203,12 +253,36 @@ try {
   await p3.click("#go");
   await p3.waitForSelector("#panel-prog .paywall .unlock");
   await p3.click("#panel-prog .paywall .unlock");
+  await p3.check("[data-buy-ok]");
+  await p3.click("[data-buy]");
   await p3.waitForURL(/127\.0\.0\.1:8793\/payer\//);
   await p3.click("#annuler");
   await p3.waitForURL(u => u.href.startsWith(BASE + "/index.html"));
   await p3.waitForTimeout(300);
   const ann = await p3.evaluate(() => ({ url: location.href, toast: document.querySelector("#toast").textContent, unlocked }));
   check("paiement_annule", !ann.url.includes("achat") && ann.toast.includes("annulé") && !ann.unlocked, ann);
+
+  // sauvegarde importée sur un appareil neuf, puis tout effacer
+  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p4 = await ctx3.newPage();
+  await quiet(p4, "import");
+  await p4.goto(BASE + "/carnet.html#offre");
+  await p4.waitForSelector("#data-import", { state: "attached" });
+  await p4.setInputFiles("#data-import", dumpPath);
+  await p4.click("[data-act=confirm-ok]");
+  await p4.waitForLoadState("load");
+  await p4.waitForSelector("#acces");
+  await p4.waitForTimeout(300);
+  const imported = await p4.evaluate(() => ({ n: workouts.length, fonte: FONTE_PWA.has("fonte"), prog: !!localStorage.getItem("fonte.v2") }));
+  check("import_sauvegarde", imported.n >= 1 && imported.fonte && imported.prog, imported);
+  await p4.click('[data-act="data-erase"]');
+  await p4.click("[data-act=confirm-ok]");
+  await p4.waitForLoadState("load");
+  await p4.waitForSelector("#acces");
+  await p4.waitForTimeout(300);
+  const erased = await p4.evaluate(() => { const st = JSON.parse(localStorage.getItem("fonte-suivi.v1") || "{}"); return { n: workouts.length, stored: (st.workouts || []).length, fonte: FONTE_PWA.has("fonte"), keys: Object.keys(localStorage).filter(k => /^fonte/.test(k)) }; });
+  check("tout_effacer", erased.n === 0 && erased.stored === 0 && !erased.fonte && !erased.keys.some(k => /acces\.|fonte\.v2|accord/.test(k)), erased);
+  await ctx3.close();
 
   // le service worker ne met jamais l'API en cache
   const cachedApi = await page.evaluate(async () => { const out = []; for (const k of await caches.keys()) { const c = await caches.open(k); for (const r of await c.keys()) if (r.url.includes("/api/")) out.push(r.url); } return out; });
