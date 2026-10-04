@@ -1,0 +1,16 @@
+/* Carnet : tailles revues pour Audiowide, barre de navigation, minuteur et bandeaux */
+h1{font-size:1.75rem;letter-spacing:0}
+h2{font-size:1.3rem}
+h3{font-size:1.05rem}
+.exhead .exname{font-size:1.05rem}
+.primary{background:#FF2E4C;color:#0E0406;font-size:.95rem}
+.minibar{filter:drop-shadow(0 0 4px rgba(255,46,76,.75))}
+.nav{background:#120507;border-top-color:#3A1218}
+.nav button[aria-current="page"] svg{filter:drop-shadow(0 0 5px rgba(255,46,76,.85))}
+.srow.done .chk{box-shadow:0 0 10px rgba(255,179,191,.6)}
+.rest-in{background:#180709;color:#FFF1F1;box-shadow:0 0 0 1px #FF2E4C,0 0 18px rgba(255,46,76,.4)}
+.rest-in .prog{background:#FF2E4C}
+.rest-in.over{background:#FF2E4C;color:#0E0406}
+.banner{background:#180709;color:#FFF1F1;box-shadow:0 0 0 1px #FF2E4C,0 0 16px rgba(255,46,76,.3)}
+.steps li.cur{background:#FF2E4C;color:#0E0406;box-shadow:0 0 12px rgba(255,46,76,.5)}
+.steps li.cur b{background:#0E0406;color:#FF2E4C}

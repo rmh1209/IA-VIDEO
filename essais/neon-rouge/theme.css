@@ -1,0 +1,23 @@
+/* Essai, hors appli : habillage néon rouge (piste E2 « Laser rouge ») posé par-dessus les styles d'origine. */
+:root,:root:not([data-theme="light"]),:root[data-theme="dark"],:root[data-theme="light"]{
+  --bg:#0E0406; --surface:#180709; --sunk:#140508; --ink:#FFF1F1; --muted:#D9A7AD; --line:#3A1218; --on-ink:#0E0406;
+  --red:#FF2E4C; --blue:#FF9AAA; --yellow:#FFFFFF; --green:#FFB3BF; --warn:#FF9AAA; --red-btn:#FF2E4C; --on-green:#0E0406;
+  --c-prot:#FF2E4C; --c-lip:#FFB3BF; --c-glu:#FFFFFF; --bar:#FF2E4C; --band:rgba(255,46,76,.18); --veil:rgba(14,4,6,.75);
+  --done:rgba(255,46,76,.14); --shade:rgba(0,0,0,.65);
+  --fig:#FFE3E7; --fig2:#8C5A62; --eq:#B07A82; --eqf:#2A0A10;
+  --display:"Audiowide","Arial Black",sans-serif; --body:"Chivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+html{font-synthesis:none}
+body{background:repeating-linear-gradient(0deg,rgba(255,46,76,.035) 0,rgba(255,46,76,.035) 1px,transparent 1px,transparent 4px),radial-gradient(circle at 50% -8%,rgba(255,46,76,.2),rgba(255,46,76,0) 48%),#0E0406;background-attachment:fixed}
+::selection{background:rgba(255,46,76,.4)}
+h1,h2{text-shadow:0 0 12px rgba(255,46,76,.45)}
+.card{box-shadow:inset 0 0 0 1px rgba(255,46,76,.14)}
+.plate{box-shadow:0 0 10px var(--plate)}
+.primary{letter-spacing:0;box-shadow:0 0 14px rgba(255,46,76,.35)}
+.primary.red,.cta{color:#0E0406;box-shadow:0 0 18px rgba(255,46,76,.55)}
+.btn2{background:transparent}
+.btn2:hover{border-color:var(--red)}
+.unlock{color:#0E0406;box-shadow:0 0 16px rgba(255,255,255,.25)}
+.fig .hl{filter:drop-shadow(0 0 3px rgba(255,46,76,.9))}
+.anim-btn[aria-pressed="true"]{background:#FF2E4C;color:#0E0406;border-color:#FF2E4C}

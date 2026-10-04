@@ -1,0 +1,11 @@
+/* Programme : tailles revues pour Audiowide, plus large que Barlow Condensed */
+h1{font-size:clamp(2rem,8.5vw,3.3rem);letter-spacing:0}
+h2{font-size:1.5rem}
+h3{font-size:1.15rem}
+.tabs button{font-size:.95rem;letter-spacing:0}
+.tabs button[aria-selected="true"]{background:#FF2E4C;color:#0E0406;box-shadow:0 0 14px rgba(255,46,76,.55)}
+.cta{font-size:1.1rem}
+.unlock{font-size:1.05rem}
+.primary{font-size:.95rem}
+.wd.on i{box-shadow:0 0 8px var(--plate)}
+.chips button[aria-pressed="true"]{background:#FF2E4C;color:#0E0406;border-color:#FF2E4C;box-shadow:0 0 12px rgba(255,46,76,.5)}
