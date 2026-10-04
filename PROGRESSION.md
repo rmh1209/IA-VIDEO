@@ -59,7 +59,7 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Sauvegarde (séances perdues : frustration n° 5 des avis) : dans l'appli installée, rappel de sauvegarde après 5 séances puis tous les 30 jours (report de 14 jours possible), date de la dernière sauvegarde dans Offre > Tes données, stockage protégé demandé au navigateur après la première séance enregistrée, conseil d'installation sur iPhone (Safari efface les données d'un site non installé après 7 jours sans visite)
 
 ### 6. Livraison
-- [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
+- [x] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
 
 ## Journal
 
@@ -78,3 +78,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-04 : accessibilité (audit axe-core, 52 vérifications) ; batterie complète : 296 vérifications au vert.
 - 2026-10-04 : notifications et version anglaise évaluées (reportées, raisons ci-dessus) ; sauvegarde des séances (rappel, stockage protégé). Troisième vague terminée.
 - 2026-10-04 : note de la dernière fois sur chaque exercice ; temps de chargement mesuré (téléphone moyen en 4G lente : programme utilisable en 1,1 s, carnet en 1,5 s, environ 185 Ko transférés).
+- 2026-10-04 : livraison : paquets rebâtis, artefacts republiés (Fonte version 12, Carnet version 11), 305 vérifications au vert, rapport envoyé ; routine de reprise désactivée.
