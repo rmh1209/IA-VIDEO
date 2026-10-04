@@ -447,6 +447,13 @@ function weightAdvice(tr, r) {
   if (tr.rate > hi) return { delta: -kcal(tr.rate - hi), lo, hi };
   return { delta: 0, lo, hi };
 }
+const sgn = v => (v > 0 ? "+" : v < 0 ? "−" : "±");
+function waistInfo(log) {
+  const L = (Array.isArray(log) ? log : []).filter(e => e && e.tt > 0).sort((a, b) => (a.d < b.d ? -1 : 1));
+  if (!L.length) return null;
+  const last = L[L.length - 1], ref = L.filter(e => dayNum(last.d) - dayNum(e.d) >= 21).pop();
+  return { now: last.tt, d: last.d, change: ref ? last.tt - ref.tt : null, days: ref ? dayNum(last.d) - dayNum(ref.d) : 0 };
+}
 function weightChart(tr) {
   const pts = tr.all.filter(e => dayNum(tr.all[tr.all.length - 1].d) - dayNum(e.d) <= 56);
   if (pts.length < 2) return "";
@@ -459,27 +466,32 @@ function weightChart(tr) {
 function weightHTML(r) {
   const tr = weightTrend(nutri.log), adv = weightAdvice(tr, r), st = prof();
   const head = `<div class="sechead"><h3>Ton poids, semaine après semaine</h3><span class="muted small">le matin, à jeun</span></div>
-    <form id="poids-form" class="prow"><label for="poids-in" class="sr">Poids de ce matin en kilos</label><input id="poids-in" type="number" inputmode="decimal" min="35" max="250" step="0.1" placeholder="Poids de ce matin (kg)"><button type="submit" class="btn2">Noter</button></form>`;
-  if (!tr) return `<div class="card wcard">${head}<p class="muted small">Pèse-toi 3 matins ou plus par semaine. Après 10 jours, Fonte calcule ta tendance (sans se laisser piéger par l'eau ou le sel) et te dit s'il faut ajuster tes calories.</p></div>`;
+    <form id="poids-form" class="prow" novalidate><label class="pfield" for="poids-in"><span>Poids (kg)</span><input id="poids-in" type="number" inputmode="decimal" min="35" max="250" step="0.1" placeholder="ex. 78,5"></label><label class="pfield" for="tt-in"><span>Tour de taille (cm)<span class="sr">, facultatif</span></span><input id="tt-in" type="number" inputmode="decimal" min="40" max="200" step="0.5" placeholder="facultatif"></label><button type="submit" class="btn2">Noter</button></form>`;
+  if (!tr) return `<div class="card wcard">${head}<p class="muted small">Pèse-toi 3 matins ou plus par semaine. Après 10 jours, Fonte calcule ta tendance (sans se laisser piéger par l'eau ou le sel) et te dit s'il faut ajuster tes calories. Mesure aussi ton tour de taille une fois par semaine, au niveau du nombril : il montre si tu perds du gras quand la balance stagne.</p></div>`;
   const pct = tr.rate != null ? tr.rate / tr.now * 100 : null;
-  const rateTxt = tr.rate == null ? `Encore ${tr.n < 4 ? `${4 - tr.n} pesée${4 - tr.n > 1 ? "s" : ""}` : "quelques jours"} pour calculer ta tendance.` : `${tr.rate >= 0 ? "+" : "−"}${n1(Math.abs(tr.rate))} kg par semaine (${pct >= 0 ? "+" : "−"}${n1(Math.abs(pct))} %) sur ${tr.span} jours.`;
+  const rateTxt = tr.rate == null ? `Encore ${tr.n < 4 ? `${4 - tr.n} pesée${4 - tr.n > 1 ? "s" : ""}` : "quelques jours"} pour calculer ta tendance.` : `${sgn(Math.round(tr.rate * 10))}${n1(Math.abs(tr.rate))} kg par semaine (${sgn(Math.round(pct * 10))}${n1(Math.abs(pct))} %) sur ${tr.span} jours.`;
   let verdict = "";
   const since = nutri.ajustLe ? dayNum(todayISO()) - dayNum(nutri.ajustLe) : 99;
+  const wi = waistInfo(nutri.log), weeks = wi ? Math.round(wi.days / 7) : 0;
+  /* sèche : la balance stagne mais la taille fond, c'est du gras perdu et du muscle gardé, on ne retire pas de calories */
+  const recomp = !!(adv && adv.delta < 0 && st.goal === "seche" && wi && wi.change != null && wi.change <= -1);
   if (adv && unlocked && since < 10) {
     verdict = `<div class="wverdict ok"><p>Ajustement appliqué ${since === 0 ? "aujourd'hui" : `il y a ${since} jour${since > 1 ? "s" : ""}`} : continue tes pesées, Fonte regarde son effet pendant 10 jours avant de te proposer autre chose.</p></div>`;
   } else if (adv) {
     const range = `${adv.lo >= 0 ? "+" : "−"}${n1(Math.abs(adv.lo))} à ${adv.hi >= 0 ? "+" : "−"}${n1(Math.abs(adv.hi))} kg par semaine`;
-    const txt = adv.delta === 0 ? `Dans ta cible (${range}) : garde ${n0(r.kcal)} kcal par jour.`
+    const txt = recomp ? `Ton tour de taille baisse : garde ${n0(r.kcal)} kcal par jour, inutile de manger moins pour l'instant.`
+      : adv.delta === 0 ? `Dans ta cible (${range}) : garde ${n0(r.kcal)} kcal par jour.`
       : adv.delta > 0 ? `${st.goal === "seche" || st.goal === "forme" ? "Tu perds plus vite que prévu" : "Ton poids monte moins vite que prévu"} (cible : ${range}) : ajoute ${adv.delta} kcal par jour, soit ${n0(r.kcal + adv.delta)} kcal.`
       : `${st.goal === "seche" || st.goal === "forme" ? "Tu perds moins vite que prévu" : "Ton poids monte plus vite que prévu"} (cible : ${range}) : retire ${-adv.delta} kcal par jour, soit ${n0(r.kcal + adv.delta)} kcal${st.goal === "seche" ? ", ou ajoute 2 000 pas par jour" : ""}.`;
-    verdict = unlocked ? `<div class="wverdict ${adv.delta === 0 ? "ok" : "adj"}"><p>${esc(txt)}</p>${adv.delta ? `<button type="button" class="primary" data-act="poids-apply" data-k="${adv.delta}">Appliquer (${adv.delta > 0 ? "+" : "−"}${Math.abs(adv.delta)} kcal)</button>` : ""}</div>`
+    verdict = unlocked ? `<div class="wverdict ${adv.delta === 0 || recomp ? "ok" : "adj"}"><p>${esc(txt)}</p>${adv.delta && !recomp ? `<button type="button" class="primary" data-act="poids-apply" data-k="${adv.delta}">Appliquer (${adv.delta > 0 ? "+" : "−"}${Math.abs(adv.delta)} kcal)</button>` : ""}</div>`
       : `<p class="note">Ajustement automatique de tes calories d'après ta tendance : inclus dans la version complète.</p>`;
   }
   const maj = Math.abs(tr.now - +nutri.poids) >= 1 ? `<button type="button" class="linkbtn" data-act="poids-maj">Mettre ton profil à ${n1(tr.now)} kg</button>` : "";
+  const waist = wi ? `<p>Tour de taille : <b>${n1(wi.now)} cm</b>${wi.change != null ? ` · ${sgn(wi.change)}${n1(Math.abs(wi.change))} cm en ${weeks}\u00a0semaines` : ""}.${recomp ? " Ta taille baisse plus vite que ton poids : tu perds du gras en gardant ton muscle." : ""}</p>` : "";
   return `<div class="card wcard">${head}${weightChart(tr)}
-    <p>Tendance : <b>${n1(tr.now)} kg</b> · ${esc(rateTxt)} ${maj}</p>${verdict}
+    <p>Tendance : <b>${n1(tr.now)} kg</b> · ${esc(rateTxt)} ${maj}</p>${waist}${verdict}
     ${nutri.ajust ? `<p class="muted small">Ajustement déjà appliqué d'après tes pesées : ${nutri.ajust > 0 ? "+" : "−"}${Math.abs(nutri.ajust)} kcal. <button type="button" class="linkbtn" data-act="poids-reset">Revenir au calcul de base</button></p>` : ""}
-    <details><summary>Mes pesées (${tr.all.length})</summary><ul class="wlist">${tr.all.slice(-14).reverse().map(e => `<li><span>${new Date(e.d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span><b>${n1(e.kg)} kg</b><button type="button" class="linkbtn" data-act="poids-del" data-d="${e.d}" aria-label="Supprimer la pesée du ${e.d}">Supprimer</button></li>`).join("")}</ul></details></div>`;
+    <details><summary>Mes pesées (${tr.all.length})</summary><ul class="wlist">${tr.all.slice(-14).reverse().map(e => `<li><span>${new Date(e.d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}</span><b>${n1(e.kg)} kg</b>${e.tt ? `<span class="muted">${n1(e.tt)} cm</span>` : ""}<button type="button" class="linkbtn" data-act="poids-del" data-d="${e.d}" aria-label="Supprimer la pesée du ${e.d}">Supprimer</button></li>`).join("")}</ul></details></div>`;
 }
 function adjTxt(r) { return r.adj === 0 ? "maintien" : `${r.adj > 0 ? "+" : "−"}${n0(Math.abs(r.adj))} kcal (${r.label})`; }
 function tile(label, key, val, sub) {
@@ -560,13 +572,15 @@ $("#panel-nutri").addEventListener("input", e => {
 $("#panel-nutri").addEventListener("submit", e => {
   if (e.target.id !== "poids-form") return;
   e.preventDefault();
-  const kg = clampNum($("#poids-in").value, 35, 250);
+  const kg = clampNum($("#poids-in").value, 35, 250), ttRaw = $("#tt-in").value.trim(), tt = ttRaw ? clampNum(ttRaw, 40, 200) : null;
   if (kg == null) { toast("Indique un poids entre 35 et 250 kg."); return; }
-  const d = todayISO(), log = (Array.isArray(nutri.log) ? nutri.log : []).filter(x => x.d !== d);
-  log.push({ d, kg: Math.round(kg * 10) / 10 });
+  if (ttRaw && tt == null) { toast("Indique un tour de taille entre 40 et 200 cm."); return; }
+  const d = todayISO(), all = Array.isArray(nutri.log) ? nutri.log : [], prev = all.find(x => x.d === d), log = all.filter(x => x.d !== d);
+  const keepTt = tt ? Math.round(tt * 2) / 2 : prev && prev.tt > 0 ? prev.tt : 0;
+  log.push({ d, kg: Math.round(kg * 10) / 10, ...(keepTt ? { tt: keepTt } : {}) });
   nutri.log = log.sort((a, b) => (a.d < b.d ? -1 : 1)).slice(-400);
   renderNutriOut(); save();
-  toast(`Pesée notée : ${n1(kg)} kg.`);
+  toast(`Pesée notée : ${n1(kg)} kg${keepTt ? `, ${n1(keepTt)} cm de tour de taille` : ""}.`);
 });
 $("#panel-nutri").addEventListener("click", e => {
   const a = e.target.closest("[data-act^='poids-']");
@@ -829,6 +843,8 @@ function contexte() {
     L.push(`Nutrition : ${nutri.sexe === "f" ? "femme" : "homme"}, ${nutri.age} ans, ${nutri.taille} cm, ${nutri.poids} kg, activité ${ACT[nutri.act].l.toLowerCase()}, alimentation ${REG[nutri.reg].toLowerCase()} → métabolisme de base ${n0(r.bmr)} kcal, dépense ~${n0(r.tdee)} kcal, cible ${n0(r.kcal)} kcal (${adjTxt(r)}) ; protéines ${r.prot} g, lipides ${r.fat} g, glucides ${r.carbs} g ; eau ${n1(r.water)} L (+${n1(r.waterTrain)} L par séance) ; IMC ${n1(r.bmi)}`);
   }
   const tr = weightTrend(nutri.log);
+  const wi = waistInfo(nutri.log);
+  if (wi) L.push(`Tour de taille : ${n1(wi.now)} cm${wi.change != null ? ` (${sgn(wi.change)}${n1(Math.abs(wi.change))} cm en ${Math.round(wi.days / 7)} semaines)` : ""}`);
   if (tr) L.push(`Pesées : ${tr.all.length} ; tendance ${n1(tr.now)} kg${tr.rate != null ? `, ${tr.rate >= 0 ? "+" : "−"}${n1(Math.abs(tr.rate))} kg par semaine sur ${tr.span} jours` : ""}${nutri.ajust ? ` ; calories déjà ajustées de ${nutri.ajust > 0 ? "+" : ""}${nutri.ajust} kcal d'après les pesées` : ""}`);
   L.push(`Modifications déjà faites : ${edits.length ? edits.slice(-12).join(" ; ") : "aucune"}`);
   return L.join("\n");

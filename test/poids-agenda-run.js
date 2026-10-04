@@ -48,6 +48,34 @@ const check = (name, cond, extra) => { R[name] = cond ? "OK" : "FAIL " + JSON.st
   check("pesee_et_contexte", log.last.kg === 79.4 && log.n >= 7 && /tendance 7\d(,\d)? kg/.test(log.ctx || "") && /calories déjà ajustées/.test(log.ctx || ""), log);
   await page.click('[data-act="poids-reset"]');
   check("retour_calcul_base", (await page.evaluate(() => nutri.ajust)) === 0);
+  // tour de taille : saisi avec la pesée, gardé si on corrige le poids du jour sans le ressaisir
+  await page.fill("#poids-in", "79.2"); await page.fill("#tt-in", "86.3");
+  await page.click("#poids-form button[type=submit]");
+  const tt1 = await page.evaluate(() => nutri.log[nutri.log.length - 1]);
+  await page.fill("#poids-in", "79.1");
+  await page.click("#poids-form button[type=submit]");
+  const tt2 = await page.evaluate(() => ({ last: nutri.log[nutri.log.length - 1], n: nutri.log.filter(e => e.d === nutri.log[nutri.log.length - 1].d).length }));
+  check("taille_saisie_gardee", tt1.tt === 86.5 && tt1.kg === 79.2 && tt2.last.tt === 86.5 && tt2.last.kg === 79.1 && tt2.n === 1, { tt1, tt2 });
+  await page.fill("#poids-in", "79"); await page.fill("#tt-in", "250");
+  await page.click("#poids-form button[type=submit]");
+  const bad = await page.evaluate(() => ({ kg: nutri.log[nutri.log.length - 1].kg, toast: document.querySelector(".toast")?.textContent || "" }));
+  check("taille_invalide_refusee", bad.kg === 79.1 && /entre 40 et 200 cm/.test(bad.toast), bad);
+  await page.fill("#tt-in", "");
+  // sèche : la balance stagne mais la taille fond depuis 4 semaines, pas de baisse de calories proposée
+  await page.evaluate(() => {
+    state.goal = "seche"; if (plan) plan.from = { ...plan.from, goal: "seche" };
+    const t = Date.now(), dd = k => new Date(t - k * 864e5).toISOString().slice(0, 10);
+    nutri.ajust = 0; nutri.ajustLe = ""; nutri.log = [28, 24, 21, 17, 14, 10, 7, 3, 0].map((k, i) => ({ d: dd(k), kg: 80 + (i % 2 ? 0.2 : -0.1), ...(k % 7 === 0 ? { tt: 90 - (28 - k) / 7 } : {}) }));
+  });
+  await page.evaluate(() => renderNutriOut());
+  const rc = await page.evaluate(() => ({ goal: prof().goal, card: document.querySelector(".wcard").textContent, apply: !!document.querySelector('[data-act="poids-apply"]'), cls: document.querySelector(".wverdict")?.className, ctx: contexte().split("\n").find(l => l.startsWith("Tour de taille")), list: document.querySelector(".wlist").textContent }));
+  check("taille_recomposition", rc.goal === "seche" && /Tour de taille : 86 cm · −3 cm en 3\ssemaines/.test(rc.card) && /±0 kg par semaine \(±0 %\)/.test(rc.card) && /tu perds du gras en gardant ton muscle/.test(rc.card) && /inutile de manger moins/.test(rc.card) && !rc.apply && /\bok\b/.test(rc.cls || "") && /^Tour de taille : 86 cm \(−3 cm en 3 semaines\)$/.test(rc.ctx || "") && /86 cm/.test(rc.list), rc);
+  await page.addStyleTag({ content: ".tabs{position:static!important}" });
+  await page.locator(".wcard").screenshot({ path: path.join(DIR, "poids-taille.png") });
+  // sans baisse de taille, la baisse de calories reste proposée
+  await page.evaluate(() => { nutri.log = nutri.log.map(e => (e.tt ? { ...e, tt: 90 } : e)); renderNutriOut(); });
+  const nr = await page.evaluate(() => ({ card: document.querySelector(".wcard").textContent, apply: document.querySelector('[data-act="poids-apply"]')?.dataset.k }));
+  check("taille_stable_conseil_normal", /±0 cm en 3\ssemaines/.test(nr.card) && /perds moins vite que prévu/.test(nr.card) && +nr.apply < 0, nr);
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check("pas_de_debordement", !over);
   await browser.close();
