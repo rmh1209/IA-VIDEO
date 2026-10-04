@@ -15,10 +15,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
-:root{--bg:#EEF0ED;--surface:#FFFFFF;--ink:#18202A;--muted:#5B6672;--line:#D5DAD6;--red:#C8322F;--blue:#2457A6;--yellow:#E0AE1C;--green:#2F8A4E;
+:root{--bg:#EEF0ED;--surface:#FFFFFF;--ink:#18202A;--muted:#5B6672;--line:#D5DAD6;--red:#C8322F;--blue:#2457A6;--yellow:#E0AE1C;--green:#287A44;--red-btn:#C8322F;
   --display:"Barlow Condensed","Arial Narrow",sans-serif;--body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12171E;--surface:#1B222C;--ink:#ECEFEA;--muted:#9AA5B1;--line:#2C3642;--red:#E05A55;--blue:#5C8BDA;--green:#4FAF6E;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#12171E;--surface:#1B222C;--ink:#ECEFEA;--muted:#9AA5B1;--line:#2C3642;--red:#E05A55;--blue:#5C8BDA;--green:#4FAF6E;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12171E;--surface:#1B222C;--ink:#ECEFEA;--muted:#9AA5B1;--line:#2C3642;--red:#EC6A65;--blue:#5C8BDA;--green:#4FAF6E;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12171E;--surface:#1B222C;--ink:#ECEFEA;--muted:#9AA5B1;--line:#2C3642;--red:#EC6A65;--blue:#5C8BDA;--green:#4FAF6E;color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.55 var(--body);-webkit-text-size-adjust:100%}
 a{color:var(--blue)}
@@ -27,7 +27,8 @@ header.top{display:flex;align-items:center;gap:12px;padding:14px 0;padding-top:c
 .brand{display:flex;align-items:center;gap:10px;font:800 1.5rem/1 var(--display);letter-spacing:.5px;text-decoration:none;color:inherit}
 .brand svg{width:44px;height:22px}
 .sp{flex:1}
-.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--red);color:#fff;text-decoration:none;font:800 1.25rem/1 var(--display);letter-spacing:.3px;border-radius:12px;padding:16px 22px;min-height:52px}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.cta{display:inline-flex;align-items:center;justify-content:center;background:var(--red-btn);color:#fff;text-decoration:none;font:800 1.25rem/1 var(--display);letter-spacing:.3px;border-radius:12px;padding:16px 22px;min-height:52px}
 .cta.small{font-size:1.05rem;padding:11px 16px;min-height:44px}
 .hero{padding:28px 0 36px;display:grid;gap:16px}
 .hero h1{font:800 clamp(2.6rem,9vw,4.6rem)/.98 var(--display);margin:0;letter-spacing:.2px}

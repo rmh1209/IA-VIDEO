@@ -130,6 +130,13 @@
   /* ===== Feuilles de confirmation : achat (récapitulatif, accord exprès) et résiliation (confirmation téléchargeable) ===== */
   const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const dateFr = (t, withTime) => new Date(t).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}) });
+  function trap(e, box) {
+    const f = [...box.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(el => el.getClientRects().length);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1], inside = box.contains(document.activeElement);
+    if (e.shiftKey && (!inside || document.activeElement === first)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (!inside || document.activeElement === last)) { e.preventDefault(); first.focus(); }
+  }
   function sheet(html, label) {
     css();
     const back = document.activeElement, d = document.createElement("div");
@@ -138,7 +145,7 @@
     document.body.appendChild(d);
     const close = () => { d.remove(); if (back && back.focus) back.focus(); };
     d.addEventListener("click", e => { if (e.target === d || e.target.closest("[data-sheet-close]")) close(); });
-    d.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+    d.addEventListener("keydown", e => { if (e.key === "Escape") close(); else if (e.key === "Tab") trap(e, d); });
     const first = d.querySelector("input, button");
     if (first) first.focus();
     return { el: d, close };
@@ -456,7 +463,7 @@ html.has-appnav .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
 .pwa-err{color:var(--red);font-weight:600;font-size:14.5px}
 .pwa-link{background:none;border:0;color:var(--blue);font:600 15px/1 var(--body,inherit);cursor:pointer;padding:12px 4px;min-height:44px}
 .pwa-ok[disabled]{opacity:.45;cursor:not-allowed}
-.pwa-danger{background:var(--red)!important;color:#fff!important}`;
+.pwa-danger{background:var(--red-btn,#C8322F)!important;color:#fff!important}`;
     document.head.appendChild(st);
   }
 
@@ -522,7 +529,7 @@ html.has-appnav .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
     document.body.appendChild(d);
     const close = () => { d.remove(); if (back && back.focus) back.focus(); };
     d.addEventListener("click", e => { if (e.target === d || e.target.closest(".pwa-ok")) close(); });
-    d.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+    d.addEventListener("keydown", e => { if (e.key === "Escape") close(); else if (e.key === "Tab") trap(e, d); });
     d.querySelector(".pwa-ok").focus();
   }
   addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; hide(); show(); });

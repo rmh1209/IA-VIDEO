@@ -497,9 +497,9 @@ function exCardHTML(x, i) {
   const anyDone = x.sets.some(s => s.done), demo = typeof DEMO !== "undefined" && DEMO.has(x.id);
   const ss = ssInfo(i);
   return `<article class="exc${ss ? " ss" : ""}" id="ex-${i}" data-i="${i}">${ss ? `<p class="ssbadge">Superset ${ss.letter} · ${ss.letter}${ss.pos} sur ${ss.size}${ss.last ? " · puis repos" : " · enchaîne sans repos"}</p>` : ""}
-    <div class="exhead">${demo ? `<button type="button" class="thumb" data-act="cues" data-i="${i}" aria-label="Démo animée : ${esc(x.n)}">${DEMO.thumb(x.id)}</button>` : ""}<h3>${esc(x.n)}</h3><button type="button" class="iconbtn" data-act="ex-menu" data-i="${i}" aria-expanded="false" aria-controls="exm-${i}" aria-label="Options : ${esc(x.n)}">${ICON.dots}</button></div>
+    <div class="exhead">${demo ? `<button type="button" class="thumb" data-act="cues" data-i="${i}" aria-expanded="false" aria-controls="cues-${i}" aria-label="Démo animée : ${esc(x.n)}">${DEMO.thumb(x.id)}</button>` : ""}<h2 class="exname">${esc(x.n)}</h2><button type="button" class="iconbtn" data-act="ex-menu" data-i="${i}" aria-expanded="false" aria-controls="exm-${i}" aria-label="Options : ${esc(x.n)}">${ICON.dots}</button></div>
     ${tgt ? `<p class="target">${esc(tgt)}</p>` : ""}${tip}${platesHTML(x, i)}${warmHTML(x, i)}
-    <div class="row" id="exm-${i}" hidden><button type="button" class="btn2" data-act="cues" data-i="${i}">${demo ? "Démo et consignes" : "Consignes"}</button><button type="button" class="btn2" data-act="replace" data-i="${i}"${anyDone ? " disabled" : ""}>Remplacer</button>${i > 0 ? `<button type="button" class="btn2" data-act="up" data-i="${i}">Monter</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="down" data-i="${i}">Descendre</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="ss-link" data-i="${i}">${x.ss && active.ex[i + 1].ss === x.ss ? "Délier du suivant" : "Superset avec le suivant"}</button>` : ""}<button type="button" class="btn2" data-act="remove-ex" data-i="${i}">Retirer</button></div>
+    <div class="row" id="exm-${i}" hidden><button type="button" class="btn2" data-act="cues" data-i="${i}" aria-expanded="false" aria-controls="cues-${i}">${demo ? "Démo et consignes" : "Consignes"}</button><button type="button" class="btn2" data-act="replace" data-i="${i}"${anyDone ? " disabled" : ""}>Remplacer</button>${i > 0 ? `<button type="button" class="btn2" data-act="up" data-i="${i}">Monter</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="down" data-i="${i}">Descendre</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="ss-link" data-i="${i}">${x.ss && active.ex[i + 1].ss === x.ss ? "Délier du suivant" : "Superset avec le suivant"}</button>` : ""}<button type="button" class="btn2" data-act="remove-ex" data-i="${i}">Retirer</button></div>
     <div class="cues" id="cues-${i}" hidden>${demo ? `<div class="anim-host" data-ex="${x.id}" data-name="${esc(x.n)}"></div>` : ""}${cues}</div>
     <div class="sets"><div class="srow h" aria-hidden="true"><span>#</span><span>Précédent</span><span>kg</span><span>${timed ? "Durée" : "Reps"}</span><span></span></div>${x.sets.map((s, j) => setRowHTML(x, i, s, j)).join("")}</div>
     <div class="exfoot"><button type="button" class="btn2" data-act="add-set" data-i="${i}">+ Série</button>${x.sets.length > 1 ? `<button type="button" class="btn2" data-act="del-set" data-i="${i}">− Série</button>` : ""}<span class="sp"></span><button type="button" class="linkbtn" data-act="note" data-i="${i}">${x.note ? "Note" : "Ajouter une note"}</button>${x.note || x.showNote ? `<textarea class="note-in" data-i="${i}" aria-label="Note pour ${esc(x.n)}" placeholder="Sensations, réglage machine, douleur…">${esc(x.note)}</textarea>` : ""}</div>
@@ -507,7 +507,7 @@ function exCardHTML(x, i) {
 }
 function liveHTML() {
   const a = active;
-  return `<div class="livehead"><div><b>${esc(a.name)}</b>${a.deload ? ' <span class="badge">Décharge</span>' : ""}<div class="muted small" id="live-count">${doneCount()} / ${totalCount()} séries validées</div></div><span class="sp"></span><span class="clock" id="clock">${mmss((Date.now() - a.startedAt) / 1000)}</span><button type="button" class="primary red" data-act="finish">Terminer</button></div>
+  return `<div class="livehead"><div><h1 class="lvname">${esc(a.name)}</h1>${a.deload ? ' <span class="badge">Décharge</span>' : ""}<div class="muted small" id="live-count">${doneCount()} / ${totalCount()} séries validées</div></div><span class="sp"></span><span class="clock" id="clock">${mmss((Date.now() - a.startedAt) / 1000)}</span><button type="button" class="primary red" data-act="finish">Terminer</button></div>
     ${a.ex.length ? a.ex.map((x, i) => exCardHTML(x, i)).join("") : `<div class="card"><p>Ajoute ton premier exercice pour commencer.</p></div>`}
     <div class="row"><button type="button" class="btn2" data-act="add-ex">+ Ajouter un exercice</button><span class="sp"></span><button type="button" class="linkbtn" data-act="discard">Abandonner la séance</button></div>`;
 }
@@ -587,6 +587,7 @@ function discardWorkout() { active = null; saveActive(); stopRest(); releaseWake
 /* ===== Minuteur, son, écran allumé ===== */
 function startRest(sec, label) {
   rest = { end: Date.now() + sec * 1000, total: sec, label, over: false };
+  $("#rest-sr").textContent = "";
   $("#toast").hidden = true; // le minuteur prend la place du message
   clearTimeout(toastTimer);
   $("#rest").hidden = false;
@@ -599,7 +600,7 @@ function tickRest() {
   if (!rest) return;
   const left = Math.ceil((rest.end - Date.now()) / 1000);
   if (left <= 0) {
-    if (!rest.over) { rest.over = true; beep(); try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (e) { /* vibreur absent */ } $("#rest-in").classList.add("over"); $("#rest-l").textContent = "Repos terminé : série suivante !"; $("#rest-t").textContent = "0:00"; $("#rest-p").style.width = "100%"; }
+    if (!rest.over) { rest.over = true; beep(); try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (e) { /* vibreur absent */ } $("#rest-in").classList.add("over"); $("#rest-l").textContent = "Repos terminé : série suivante !"; $("#rest-sr").textContent = "Repos terminé : série suivante."; $("#rest-t").textContent = "0:00"; $("#rest-p").style.width = "100%"; }
     if (left < -15) stopRest();
     return;
   }
@@ -666,6 +667,14 @@ function openSheet(html) {
   $("#sheet").hidden = false;
   const f = $("#sheet-box").querySelector("input, textarea, button.primary, button");
   if (f) f.focus({ preventScroll: true });
+}
+/* garde le focus clavier dans une fenêtre modale */
+function trapTab(e, box) {
+  const f = [...box.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')].filter(el => el.getClientRects().length);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1], inside = box.contains(document.activeElement);
+  if (e.shiftKey && (!inside || document.activeElement === first)) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (!inside || document.activeElement === last)) { e.preventDefault(); first.focus(); }
 }
 function closeSheet() { $("#sheet").hidden = true; $("#sheet-box").innerHTML = ""; lib = null; confirmFn = null; if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true }); }
 function openConfirm(msg, okLabel, fn) {
@@ -760,12 +769,12 @@ function barChart(el, bars, target) {
   const step = niceStep(maxV, 3), top = Math.ceil(maxV / step) * step;
   const Y = v => pt + (1 - v / top) * (H - pt - pb);
   const slot = (W - pl - pr) / bars.length, bw = Math.min(24, slot * 0.6);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Séances par semaine sur 12 semaines">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="group" aria-label="Séances par semaine sur 12 semaines">`;
   for (let v = 0; v <= top + 0.001; v += step) s += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${f1(v)}</text>`;
   bars.forEach((b, i) => {
     const x = pl + slot * i + (slot - bw) / 2, y = Y(b.v), h = Y(0) - y;
     if (b.v > 0) s += `<path d="M${x},${Y(0)} V${y + 4} Q${x},${y} ${x + 4},${y} H${x + bw - 4} Q${x + bw},${y} ${x + bw},${y + 4} V${Y(0)} Z" fill="var(--bar)"/>`;
-    s += `<rect class="hit" data-i="${i}" x="${pl + slot * i}" y="${pt}" width="${slot}" height="${H - pt - pb}" fill="transparent" tabindex="0" aria-label="${esc(b.label)} : ${b.v} séance${b.v > 1 ? "s" : ""}"/>`;
+    s += `<rect class="hit" data-i="${i}" x="${pl + slot * i}" y="${pt}" width="${slot}" height="${H - pt - pb}" fill="transparent" tabindex="0" role="img" aria-label="${esc(b.label)} : ${b.v} séance${b.v > 1 ? "s" : ""}"/>`;
     if (i === 0 || i === bars.length - 1 || i % 4 === 0) s += `<text x="${pl + slot * i + slot / 2}" y="${H - 6}" text-anchor="middle">${esc(b.short)}</text>`;
   });
   s += `<line x1="${pl}" x2="${W - pr}" y1="${Y(target)}" y2="${Y(target)}" stroke="var(--green)" stroke-width="2"/><text x="${W - pr}" y="${Y(target) - 6}" text-anchor="end" style="fill:var(--ink)">objectif ${target}</text>`;
@@ -784,7 +793,7 @@ function lineChart(el, pts) {
   const yMin = Math.floor((lo - step * 0.3) / step) * step, yMax = Math.ceil((hi + step * 0.3) / step) * step;
   const X = t => t1 === t0 ? (pl + W - pr) / 2 : pl + (t - t0) / (t1 - t0) * (W - pl - pr);
   const Y = v => pt + (1 - (v - yMin) / (yMax - yMin)) * (H - pt - pb);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Force estimée au fil des séances">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="group" aria-label="Force estimée au fil des séances">`;
   for (let v = yMin; v <= yMax + 0.001; v += step) s += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${f0(v)}</text>`;
   s += `<text x="${pl}" y="${H - 6}">${dateFr(t0, { day: "numeric", month: "short" })}</text><text x="${W - pr}" y="${H - 6}" text-anchor="end">${dateFr(t1, { day: "numeric", month: "short" })}</text>`;
   const path = pts.map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ");
@@ -792,7 +801,7 @@ function lineChart(el, pts) {
   pts.forEach(p => { s += `<circle cx="${X(p.t)}" cy="${Y(p.v)}" r="${p.pr ? 5.5 : 4}" fill="${p.pr ? "var(--yellow)" : "var(--bar)"}" stroke="var(--surface)" stroke-width="2"/>`; });
   const lp = pts[pts.length - 1];
   s += `<text x="${Math.min(W - pr, X(lp.t))}" y="${Y(lp.v) - 10}" text-anchor="end" style="fill:var(--ink);font-weight:600">${f1(lp.v)} kg</text>`;
-  s += `<line class="xh" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/><rect class="hit" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent" tabindex="0" aria-label="Survole ou parcours la courbe pour voir chaque séance"/></svg><div class="tip" hidden></div>`;
+  s += `<line class="xh" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/><rect class="hit" x="${pl}" y="${pt}" width="${W - pl - pr}" height="${H - pt - pb}" fill="transparent" tabindex="0" role="img" aria-label="Courbe de force : flèches gauche et droite pour parcourir les séances"/></svg><div class="tip" hidden aria-live="polite"></div>`;
   el.innerHTML = s;
   const tip = el.querySelector(".tip"), xh = el.querySelector(".xh"), hit = el.querySelector(".hit");
   let cur = pts.length - 1;
@@ -864,7 +873,7 @@ function renderProgress() {
   ${tiersCardHTML(list)}${stageCardHTML(list, real)}${recapHTML(list)}
   <section class="stats"><div class="stat"><span>Séances ce mois</span><b>${month.length}</b></div><div class="stat"><span>Records ce mois</span><b>${month.reduce((t, w) => t + (w.prs ? w.prs.length : 0), 0)}</b></div><div class="stat"><span>Série en cours</span><b>${streak(list, target)} sem.</b></div></section>
   <section class="card"><div class="sechead"><h2>Régularité</h2><span class="muted small">séances par semaine</span></div><div class="chart" id="ch-weeks"></div>
-    <details><summary>Voir les données</summary><div class="tbl"><table><thead><tr><th>Semaine</th><th class="n">Séances</th></tr></thead><tbody>${bars.map(b => `<tr><td>${esc(b.label)}</td><td class="n">${b.v}</td></tr>`).join("")}</tbody></table></div></details></section>
+    <details><summary>Voir les données</summary><div class="tbl" tabindex="0" role="region" aria-label="Séances par semaine"><table><thead><tr><th>Semaine</th><th class="n">Séances</th></tr></thead><tbody>${bars.map(b => `<tr><td>${esc(b.label)}</td><td class="n">${b.v}</td></tr>`).join("")}</tbody></table></div></details></section>
   ${forceCardHTML(list, real)}
   <section class="gate ${isPro() ? "" : "locked"}"><div class="body" style="display:grid;gap:22px"${isPro() ? "" : " inert"}>
     <div class="card" style="display:grid;gap:10px"><div class="sechead"><h2>Force estimée</h2><span class="muted small">1RM estimé (formule d'Epley)</span></div>
@@ -872,7 +881,7 @@ function renderProgress() {
     <div class="card"><div class="sechead"><h2>Séries par muscle</h2><span class="muted small">cette semaine · cible ${lo} à ${hi}</span></div>
       <div class="vol">${mkeys.map(k => `<div class="vrow"><span class="vname">${MUS[k]}</span><div class="vtrack"><div class="vband" style="left:${sc(lo)}%;width:${sc(hi) - sc(lo)}%"></div>${mv[k] > 0 ? `<div class="vfill" style="width:${sc(mv[k])}%"></div>` : ""}</div><span class="vval${mv[k] < lo ? " low" : ""}">${f1(mv[k])}${mv[k] < lo ? " ↓" : mv[k] > hi ? " ↑" : ""}</span></div>`).join("")}</div>
       <p class="muted small" style="margin-top:8px">Séries validées depuis lundi : 1 pour le muscle visé, 0,5 pour les muscles qui aident. Zone verte : ta cible hebdomadaire.</p></div>
-    <div class="card"><h2>Records</h2><div class="tbl"><table><thead><tr><th>Exercice</th><th class="n">Force estimée</th><th class="n">Meilleure série</th><th class="n">Date</th></tr></thead><tbody>${records.slice(0, 15).map(r => `<tr><td>${esc(r.n)}</td><td class="n">${f1(r.best.e)} kg</td><td class="n">${f1(r.best.w)} × ${r.best.r}</td><td class="n">${dateFr(r.when, { day: "numeric", month: "short" })}</td></tr>`).join("")}</tbody></table></div></div>
+    <div class="card"><h2>Records</h2><div class="tbl" tabindex="0" role="region" aria-label="Tableau des records"><table><thead><tr><th>Exercice</th><th class="n">Force estimée</th><th class="n">Meilleure série</th><th class="n">Date</th></tr></thead><tbody>${records.slice(0, 15).map(r => `<tr><td>${esc(r.n)}</td><td class="n">${f1(r.best.e)} kg</td><td class="n">${f1(r.best.w)} × ${r.best.r}</td><td class="n">${dateFr(r.when, { day: "numeric", month: "short" })}</td></tr>`).join("")}</tbody></table></div></div>
     <div class="ai" id="ai-box"><div class="sechead"><h2>Analyse du coach</h2><span class="muted small">même expertise que le coach Fonte</span></div>
       <p class="muted small">Le coach lit tes 8 dernières semaines : ce qui progresse, ce qui stagne, et tes ajustements pour les deux prochaines semaines.</p>
       ${ai.consent && window.FONTE_PWA && window.FONTE_PWA.needsConsent() ? window.FONTE_PWA.consentHTML("Avant l'analyse de tes séances") : ""}
@@ -967,7 +976,7 @@ function renderOffre() {
   const V = $("#v-offre"), P = profile.program, st = from();
   const pro = isPro(), bundle = hasBundle(), pay = PAY(), until = pay && pro ? window.FONTE_PWA.premiumUntil() : 0;
   V.innerHTML = `${importBanner()}<section><h1>Ton offre</h1><p class="muted">Fonte Suivi est relié à ton programme Fonte : tes séances, tes charges et tes progrès au même endroit.</p></section>
-  <section class="plans">
+  <section class="plans"><h2 class="sr">Les formules</h2>
     <div class="plancard"><div class="sechead"><h3>Gratuit</h3>${!pro ? '<span class="badge">Offre actuelle</span>' : ""}</div><div class="price">0 €</div>
       <ul><li>Enregistrement des séances et minuteur de repos</li><li>Import de ton programme Fonte</li><li>Historique des 30 derniers jours</li><li>Régularité semaine par semaine</li></ul>
       ${pro && !pay ? '<button type="button" class="btn2" data-act="plan-free">Revenir au gratuit</button>' : ""}</div>
@@ -1100,6 +1109,7 @@ document.addEventListener("click", e => {
     case "cues": {
       const c = $("#cues-" + i), host = c.querySelector(".anim-host");
       c.hidden = !c.hidden;
+      document.querySelectorAll(`[data-act="cues"][data-i="${i}"]`).forEach(x => x.setAttribute("aria-expanded", c.hidden ? "false" : "true"));
       if (host) c.hidden ? DEMO.unmount(host) : DEMO.mount(host, host.dataset.ex, host.dataset.name);
       if (!c.hidden) c.scrollIntoView({ block: "nearest", behavior: "smooth" });
       break;
@@ -1165,6 +1175,7 @@ document.addEventListener("submit", e => { if (e.target.id === "body-form") { e.
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pullFonte(); });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && !$("#sheet").hidden) closeSheet();
+  if (e.key === "Tab" && !$("#sheet").hidden) trapTab(e, $("#sheet-box"));
   if (e.key === "Enter" && e.target.matches(".srow input")) { e.preventDefault(); const row = e.target.closest(".srow"); if (e.target.dataset.f === "w") row.querySelector('[data-f="r"]').focus(); else toggleDone(+row.dataset.i, +row.dataset.j); }
 });
 window.addEventListener("hashchange", () => { const c = hashCode(); if (c && fp(c) !== profile.lastCode) { pendingCode = c; render(); } });

@@ -52,7 +52,7 @@ concurrentes en s'appuyant sur les avis clients.
 ### 5. Troisième vague
 - [x] Bilan du mois automatique dans Progrès (séances et volume comparés au mois précédent, points gagnés, plus forte progression, records, navigation par mois)
 - [x] Mensurations : tour de taille noté avec la pesée ; en sèche, une taille qui baisse alors que la balance stagne bloque la baisse de calories (perte de gras, muscle gardé)
-- [ ] Accessibilité : revue clavier, contrastes, libellés des boutons
+- [x] Accessibilité : audit axe-core (WCAG 2.2 AA) de 24 écrans en clair et en sombre ; contrastes corrigés (vert, rouge en mode sombre, jours de récupération), titres hiérarchisés, tableaux défilants atteignables au clavier, focus gardé dans les fenêtres, graphiques et minuteur annoncés aux lecteurs d'écran ; point accessibilité ajouté à la conformité (directive 2019/882, exemption des microentreprises)
 - [ ] Rappels de séance par notification (Web Push, serveur) : à évaluer
 - [ ] Version anglaise : à évaluer
 
@@ -73,3 +73,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-04 : page de présentation ; deuxième vague terminée.
 - 2026-10-04 : bilan du mois ; en-tête du carnet corrigé sur les petits écrans (débordement avec Premium et un palier long).
 - 2026-10-04 : tour de taille dans le suivi du poids, champs avec intitulés visibles ; batterie complète `node test/tout.mjs` : 244 vérifications au vert.
+- 2026-10-04 : accessibilité (audit axe-core, 52 vérifications) ; batterie complète : 296 vérifications au vert.

@@ -7,10 +7,11 @@ carnet de séances (paliers, stades, repères de force), appli installable et se
 
 - `src/` : Fonte (programme, coach, nutrition, mobilité) — `brain.js` (cerveau du coach), `data.js` (exercices),
   `anim-*.js` (démos animées), `progress.js` (paliers, stades, force), `app.js`, `head.html` (styles et structure).
-- `suivi/` : le Carnet (Fonte Suivi) — `paliers.js`, `app.js`, `head.html`.
+- `suivi/` : le Carnet (Fonte Suivi) — `app.js`, `paliers.js`, `import.js` (import Strong et Hevy), `partage.js` (carte de séance), `head.html`.
 - `pwa/` : appli installable (`pwa.js` : runtime, coach par le serveur, achats ; `sw.js` ; manifeste ; icônes).
 - `server/` : serveur Cloudflare Workers (coach via l'API Claude, paiement Stripe, jetons d'accès). Voir `server/LISEZ-MOI.md`.
-- `test/` : tests (Playwright, faux Claude et faux Stripe, moteur workerd via wrangler dev).
+- `test/` : tests (Playwright, faux Claude et faux Stripe, moteur workerd via wrangler dev, audit d'accessibilité axe-core).
+- `docs/` : conformité (RGPD, consommation, IA, accessibilité) et analyse des applis concurrentes.
 
 ## Construire
 
@@ -22,9 +23,9 @@ python3 build-pwa.py        # fonte.html, suivi.html (artefacts claude.ai), dist
 
 ```
 cd server && npm install && cd ../test && npm install && cd ..
-node test/progress-unit.js && node test/run.js && node test/suivi-run.js && node test/e2e.js
-node test/demo-run.js && node test/paliers-run.js && node test/stades-run.js && node test/pwa-run.js
-node test/serveur-api.mjs && node test/serveur-appli.mjs && node test/produits-stripe.mjs
+python3 build-pwa.py           # rebâtit les deux applis, le site installable et le serveur
+node test/tout.mjs             # toute la batterie (environ 2 minutes), résumé à la fin
+node test/tout.mjs a11y pwa    # seulement les suites dont le nom commence ainsi
 ```
 
 Playwright est attendu dans `/opt/node-tools/node_modules/playwright` (Chromium préinstallé).

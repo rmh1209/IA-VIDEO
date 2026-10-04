@@ -11,5 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "jspdf": "^2.5.1"
+  },
+  "devDependencies": {
+    "axe-core": "^4.13.0"
   }
 }

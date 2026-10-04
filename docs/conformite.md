@@ -1,6 +1,6 @@
-# Fonte : conformité (RGPD, droit de la consommation, IA)
+# Fonte : conformité (RGPD, droit de la consommation, IA, accessibilité)
 
-Mise à jour : 3 octobre 2026. Ce document n'est pas un avis juridique : il décrit ce que l'appli fait, les points vérifiés et ce qui reste à la charge de l'éditeur. Fais relire tes documents légaux par un professionnel avant d'encaisser à grande échelle.
+Mise à jour : 4 octobre 2026. Ce document n'est pas un avis juridique : il décrit ce que l'appli fait, les points vérifiés et ce qui reste à la charge de l'éditeur. Fais relire tes documents légaux par un professionnel avant d'encaisser à grande échelle.
 
 ## 1. Ce que l'appli fait déjà
 
@@ -17,6 +17,7 @@ Mise à jour : 3 octobre 2026. Ce document n'est pas un avis juridique : il déc
 | Résiliation en trois clics (article L215-1-1, décret n° 2023-417) | Offre > « Résilier mon abonnement » > « Confirmer la résiliation » : effet à la fin du mois payé, confirmation immédiate (date de la demande, date de fin, effets) téléchargeable. Sans compte. Lien facultatif de connexion par e-mail au portail Stripe pour qui n'a plus son téléphone. |
 | Médiation de la consommation | Champ obligatoire dans les informations de l'éditeur, affiché dans les conditions générales. |
 | Lien vers la plateforme européenne de règlement des litiges | Plus obligatoire : la plateforme a fermé (règlement (UE) 2024/3228, abrogation au 20 juillet 2025). |
+| Accessibilité (directive européenne 2019/882, en France loi n° 2023-171 et décret n° 2023-931, applicable depuis le 28 juin 2025 aux services de commerce électronique) | Les microentreprises prestataires de services (moins de 10 salariés et chiffre d'affaires annuel ou total de bilan de 2 M€ au plus) en sont exemptées. Fonte suit quand même les règles WCAG 2.2 niveau AA : contrastes vérifiés en clair et en sombre, titres hiérarchisés, intitulés sur tous les champs et boutons, fenêtres utilisables au clavier (le focus y reste, Échap ferme), graphiques lisibles par les lecteurs d'écran, démos animées avec bouton Pause et respect du réglage « réduire les animations ». Audit automatique de 24 écrans (`test/a11y-run.js`). |
 
 ## 2. Points vérifiés et sources
 
@@ -27,6 +28,7 @@ Mise à jour : 3 octobre 2026. Ce document n'est pas un avis juridique : il déc
 - Anthropic (API) : pas d'entraînement sur les données des clients API ; suppression automatique des entrées et sorties après 7 jours depuis le 14 septembre 2025 (30 jours sur option) ; conservation plus longue en cas de violation des règles d'utilisation. Sources secondaires : [getvoibe](https://www.getvoibe.com/resources/claude-api-data-retention/), [anarlog](https://anarlog.so/blog/anthropic-data-retention-policy). **À vérifier sur privacy.anthropic.com** (inaccessible depuis l'environnement de travail).
 - Portail client Stripe avec lien de connexion par e-mail : [documentation Stripe](https://docs.stripe.com/docs/customer-management/activate-no-code-customer-portal).
 - Hébergeur : Cloudflare, Inc., 101 Townsend Street, San Francisco, CA 94107, +1 650 319 8930.
+- Accessibilité des services de commerce électronique depuis le 28 juin 2025, exemption des microentreprises prestataires de services, contrôle par la DGCCRF (jusqu'à 7 500 € d'amende par manquement pour une société) : [DGCCRF](https://www.economie.gouv.fr/dgccrf/les-fiches-pratiques/la-nouvelle-directive-europeenne-accessibilite-pour-des-produits-et-des-services-accessibles-aux-personnes-en-situation), [donneespersonnelles.fr](https://www.donneespersonnelles.fr/accessibilite-numerique-entreprises).
 
 ## 3. Registre des traitements (modèle rempli)
 
@@ -55,3 +57,4 @@ Analyse d'impact (AIPD) : le traitement porte sur des données de santé mais à
 6. **Cloudflare** : l'accord de traitement des données fait partie des conditions du service ; rien à signer de plus pour un compte standard.
 7. **Relecture** : faire relire les conditions générales et la politique de confidentialité par un juriste si possible.
 8. **Assurance** : une responsabilité civile professionnelle est recommandée pour une activité de conseil sportif.
+9. **Accessibilité** : rien à faire tant que l'entreprise reste une microentreprise. Au-delà de 10 salariés ou de 2 M€ de chiffre d'affaires, il faudra publier une déclaration d'accessibilité, indiquer dans les conditions générales comment le service répond aux exigences, et faire auditer l'appli selon la norme EN 301 549.

@@ -553,7 +553,7 @@ function renderNutriOut() {
     <div class="gate ${unlocked ? "" : "locked"}"><div class="body"${unlocked ? "" : " inert"} style="display:grid;gap:12px">
       <div class="card"><b>Ajuste après 2 semaines.</b> ${adjust}</div>
       <div class="card"><b>Méthode de la main</b>, à chaque repas, sans balance : 1 à 2 paumes de protéines, 1 à 2 poings de légumes, 1 à 2 mains en coupe de féculents, 1 à 2 pouces de matières grasses.</div>
-      <div class="card"><h4 style="margin-top:0">Tes sources de protéines · ${REG[nutri.reg].toLowerCase()}</h4><div class="tbl"><table><thead><tr><th>Aliment</th><th>Portion</th><th class="n">Protéines</th></tr></thead><tbody>${src.map(([a, p, g]) => `<tr><td>${a}</td><td>${p}</td><td class="n">${g} g</td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><h4 style="margin-top:0">Tes sources de protéines · ${REG[nutri.reg].toLowerCase()}</h4><div class="tbl" tabindex="0" role="region" aria-label="Sources de protéines"><table><thead><tr><th>Aliment</th><th>Portion</th><th class="n">Protéines</th></tr></thead><tbody>${src.map(([a, p, g]) => `<tr><td>${a}</td><td>${p}</td><td class="n">${g} g</td></tr>`).join("")}</tbody></table></div></div>
       <div class="card"><h4 style="margin-top:0">Compléments qui valent le coup</h4><ul class="tips">
         <li><b>Créatine monohydrate</b> : 3 à 5 g par jour, tous les jours, à n'importe quelle heure. La mieux prouvée pour la force et le muscle.</li>
         <li><b>Caféine</b> : ${r.caf[0]} à ${r.caf[1]} mg 30 à 60 min avant la séance, jamais après 14 h.</li>
@@ -779,7 +779,7 @@ function md(src) {
       const rows = [l]; i += 2;
       while (i < lines.length && isRow(lines[i])) { rows.push(lines[i]); i++; }
       const cells = r => r.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => inline(c.trim()));
-      html += `<div class="tbl"><table><thead><tr>${cells(rows[0]).map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.slice(1).map(r => `<tr>${cells(r).map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+      html += `<div class="tbl" tabindex="0" role="region" aria-label="Tableau"><table><thead><tr>${cells(rows[0]).map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.slice(1).map(r => `<tr>${cells(r).map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
       continue;
     }
     if ((m = l.match(/^\s*#{1,6}\s+(.*)$/))) { flush(); close(); html += `<h4>${inline(m[1])}</h4>`; }
