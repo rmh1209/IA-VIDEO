@@ -26,6 +26,7 @@ const code = o => { const b = new TextEncoder().encode(JSON.stringify(o)); let s
   check("disques_par_cote", s0.pl.includes("60 kg · par côté : 20") && s0.pl.includes("barre de 20 kg"), s0);
   check("echauffement", JSON.stringify(s0.warm.map(t => t.split(" kg")[0])) === JSON.stringify(["20", "25", "35", "47,5"]) && s0.warm[0].includes("barre seule"), s0.warm);
   check("pas_d_aide_hors_barre", !s0.legPl && !s0.legWarm, s0);
+  check("pas_de_note_sans_historique", !(await page.$("#ex-0 .lastnote")));
   await page.click("#warm-0 summary");
   await page.fill('#ex-0 .srow[data-j="0"] [data-f=w]', "100");
   const s1 = await page.evaluate(() => ({ pl: document.querySelector("#pl-0").textContent, warm: [...document.querySelectorAll("#warm-0 li")].map(li => li.textContent.split(" kg")[0]), open: document.querySelector("#warm-0").open }));
@@ -44,11 +45,17 @@ const code = o => { const b = new TextEncoder().encode(JSON.stringify(o)); let s
   // séance sans barre : échauffement en pourcentages, sans disques
   await page.click("[data-act=discard]");
   await page.click("[data-act=confirm-ok]");
-  await page.evaluate(() => { const at = Date.now() - 2 * 864e5; putWorkout({ id: "w2", name: "Haut", si: 1, startedAt: at, endedAt: at + 3e6, dur: 3000, ex: [{ id: "goblet", n: "Goblet squat", target: null, note: "", sets: [{ w: 24, r: 10 }] }], prs: [], vol: 240, nsets: 1 }); render(true); });
+  await page.evaluate(() => { const at = Date.now() - 2 * 864e5; putWorkout({ id: "w2", name: "Haut", si: 1, startedAt: at, endedAt: at + 3e6, dur: 3000, ex: [{ id: "goblet", n: "Goblet squat", target: null, note: "Haltère de 24 au rack du fond", sets: [{ w: 24, r: 10 }] }], prs: [], vol: 240, nsets: 1 }); render(true); });
   await page.click('[data-act=start][data-si="1"]');
   await page.waitForSelector("#ex-0");
   const g = await page.evaluate(() => ({ pl: !!document.querySelector("#pl-0"), warm: [...document.querySelectorAll("#warm-0 li")].map(li => li.textContent) }));
   check("echauffement_haltere", !g.pl && JSON.stringify(g.warm) === JSON.stringify(["12 kg × 8", "18 kg × 4"]), g);
+  // note de la dernière fois : affichée, puis reprise d'un geste
+  const n0 = await page.evaluate(() => document.querySelector("#ex-0 .lastnote")?.textContent || "");
+  await page.locator("#ex-0").screenshot({ path: path.join(DIR, "note-derniere-fois.png") });
+  await page.click('#ex-0 [data-act="note-reuse"]');
+  const n1 = await page.evaluate(() => ({ note: active.ex[0].note, field: document.querySelector('#ex-0 .note-in')?.value, still: !!document.querySelector("#ex-0 .lastnote"), saved: JSON.parse(localStorage.getItem("fonte-suivi.active") || "{}").ex?.[0]?.note }));
+  check("note_derniere_fois", /^Ta note du \d+ \S+ : Haltère de 24 au rack du fond Reprendre$/.test(n0.replace(/\s+/g, " ").trim()) && n1.note === "Haltère de 24 au rack du fond" && n1.field === n1.note && !n1.still && n1.saved === n1.note, { n0, n1 });
   const over = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check("pas_de_debordement", !over);
   await browser.close();

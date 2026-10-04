@@ -223,6 +223,12 @@ function importCode(code, fromApp) {
 function e1rm(w, r) { if (!w || !r) return 0; return r === 1 ? w : w * (1 + Math.min(r, 12) / 30); }
 function bestSet(sets) { let b = null; for (const s of sets) { const e = e1rm(s.w, s.r); if (e && (!b || e > b.e)) b = { e, w: s.w, r: s.r }; } return b; }
 const keyOf = x => x.id || "c:" + norm(x.n);
+/* dernière note laissée sur cet exercice (réglage machine, prise…) */
+function lastNote(key, before) {
+  let best = null;
+  for (const w of workouts) { if (before && w.startedAt >= before) continue; const x = w.ex.find(y => keyOf(y) === key && y.note); if (x && (!best || w.startedAt > best.t)) best = { t: w.startedAt, note: x.note }; }
+  return best;
+}
 function history(key, before) {
   const out = [];
   for (const w of workouts) { if (before && w.startedAt >= before) continue; const x = w.ex.find(y => keyOf(y) === key); if (x && x.sets.length) out.push({ w, x }); }
@@ -495,10 +501,11 @@ function exCardHTML(x, i) {
   const tip = isPro() ? `<p class="tip-line"><b>Conseil :</b> ${esc(sug.txt)}</p>` : `<p class="tip-line locked">Conseil de charge automatique avec Premium. <button type="button" class="linkbtn" data-act="go-offre">Voir l'offre</button></p>`;
   const cues = e ? `<p>${esc(e.c)}</p><p class="err"><b>Erreur fréquente :</b> ${esc(e.e)}</p>` : `<p>Exercice personnalisé.</p>`;
   const anyDone = x.sets.some(s => s.done), demo = typeof DEMO !== "undefined" && DEMO.has(x.id);
+  const ln = !x.note && !x.showNote ? lastNote(keyOf(x), active.startedAt) : null;
   const ss = ssInfo(i);
   return `<article class="exc${ss ? " ss" : ""}" id="ex-${i}" data-i="${i}">${ss ? `<p class="ssbadge">Superset ${ss.letter} · ${ss.letter}${ss.pos} sur ${ss.size}${ss.last ? " · puis repos" : " · enchaîne sans repos"}</p>` : ""}
     <div class="exhead">${demo ? `<button type="button" class="thumb" data-act="cues" data-i="${i}" aria-expanded="false" aria-controls="cues-${i}" aria-label="Démo animée : ${esc(x.n)}">${DEMO.thumb(x.id)}</button>` : ""}<h2 class="exname">${esc(x.n)}</h2><button type="button" class="iconbtn" data-act="ex-menu" data-i="${i}" aria-expanded="false" aria-controls="exm-${i}" aria-label="Options : ${esc(x.n)}">${ICON.dots}</button></div>
-    ${tgt ? `<p class="target">${esc(tgt)}</p>` : ""}${tip}${platesHTML(x, i)}${warmHTML(x, i)}
+    ${tgt ? `<p class="target">${esc(tgt)}</p>` : ""}${ln ? `<p class="lastnote">Ta note du ${dateFr(ln.t, { day: "numeric", month: "short" })} : <q>${esc(ln.note)}</q> <button type="button" class="linkbtn" data-act="note-reuse" data-i="${i}">Reprendre</button></p>` : ""}${tip}${platesHTML(x, i)}${warmHTML(x, i)}
     <div class="row" id="exm-${i}" hidden><button type="button" class="btn2" data-act="cues" data-i="${i}" aria-expanded="false" aria-controls="cues-${i}">${demo ? "Démo et consignes" : "Consignes"}</button><button type="button" class="btn2" data-act="replace" data-i="${i}"${anyDone ? " disabled" : ""}>Remplacer</button>${i > 0 ? `<button type="button" class="btn2" data-act="up" data-i="${i}">Monter</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="down" data-i="${i}">Descendre</button>` : ""}${i < active.ex.length - 1 ? `<button type="button" class="btn2" data-act="ss-link" data-i="${i}">${x.ss && active.ex[i + 1].ss === x.ss ? "Délier du suivant" : "Superset avec le suivant"}</button>` : ""}<button type="button" class="btn2" data-act="remove-ex" data-i="${i}">Retirer</button></div>
     <div class="cues" id="cues-${i}" hidden>${demo ? `<div class="anim-host" data-ex="${x.id}" data-name="${esc(x.n)}"></div>` : ""}${cues}</div>
     <div class="sets"><div class="srow h" aria-hidden="true"><span>#</span><span>Précédent</span><span>kg</span><span>${timed ? "Durée" : "Reps"}</span><span></span></div>${x.sets.map((s, j) => setRowHTML(x, i, s, j)).join("")}</div>
@@ -1132,6 +1139,7 @@ document.addEventListener("click", e => {
       if (!c.hidden) c.scrollIntoView({ block: "nearest", behavior: "smooth" });
       break;
     }
+    case "note-reuse": { const x = active.ex[i], ln = lastNote(keyOf(x), active.startedAt); if (ln) { x.note = ln.note; x.showNote = true; saveActive(); rerenderCard(i); } break; }
     case "note": { const x = active.ex[i]; x.showNote = true; rerenderCard(i); const t = document.querySelector(`.note-in[data-i="${i}"]`); if (t) t.focus(); break; }
     case "replace": openLibrary("replace", i); break;
     case "up": case "down": { const j = act === "up" ? i - 1 : i + 1; const a = active.ex; [a[i], a[j]] = [a[j], a[i]]; delete a[i].ss; delete a[j].ss; normalizeSS(); saveActive(); renderSeance(true); break; }

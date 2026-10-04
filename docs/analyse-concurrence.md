@@ -1,6 +1,6 @@
 # Fonte face aux applis concurrentes : ce que disent les avis clients
 
-Mise à jour : 3 octobre 2026. Synthèse d'avis publics (App Store, Trustpilot, comparatifs, forums), sources en fin de document.
+Mise à jour : 4 octobre 2026. Synthèse d'avis publics (App Store, Trustpilot, comparatifs, forums), sources en fin de document.
 
 ## En bref
 
@@ -61,6 +61,25 @@ Mise à jour : 3 octobre 2026. Synthèse d'avis publics (App Store, Trustpilot, 
 | 4 | Séances dans l'agenda du téléphone (fichier .ics) pour les rappels | Rappels demandés, pas de notifications fiables en appli web | Petit |
 | 5 | Suivi du poids lissé et ajustement automatique des calories | Point fort n° 1 de MacroFactor | Moyen |
 | 6 | Supersets | Attente n° 7 | Grand (plus tard) |
+
+## Ce qui a été fait depuis (toutes vérifiées par des tests automatiques)
+
+| Amélioration | Réponse à |
+|---|---|
+| Minuteur de repos qui sonne et vibre, écran qui reste allumé pendant la séance | Attente n° 5 |
+| Calculateur de disques (barre de 20, 15 ou 10 kg) et séries d'échauffement conseillées | Attente n° 6 |
+| Supersets dans le carnet, mémorisés pour la séance | Attente n° 7 |
+| Séances dans l'agenda du téléphone (rappel 30 min avant) | Rappels demandés |
+| Poids lissé, calories ajustées d'après la tendance, tour de taille (une taille qui baisse quand la balance stagne évite une baisse de calories inutile) | Point fort de MacroFactor |
+| Exercices accessoires renouvelés à chaque cycle | Frustration n° 6 (séances répétitives) |
+| Import de l'historique Strong et Hevy (fichier CSV) | Changer d'appli sans perdre ses séances |
+| Carte de séance à partager, bilan du mois | Motivation, envie de partager |
+| Note de la dernière fois sur chaque exercice (réglage machine, prise) | Fonction appréciée sur Hevy |
+| Rappel de sauvegarde et stockage protégé dans l'appli installée | Frustration n° 5 (séances perdues) |
+| Accessibilité WCAG 2.2 AA (contrastes, clavier, lecteurs d'écran) | Appli utilisable par tous |
+| Résiliation en trois clics, prix affichés TTC, aucune publicité, aucun compte | Frustrations n° 1 à 4 |
+
+Mesure de vitesse : sur un téléphone moyen en 4G lente, le programme est utilisable en 1,1 s et le carnet en 1,5 s (environ 185 Ko transférés), puis instantanément hors connexion.
 
 ## Angles marketing
 
