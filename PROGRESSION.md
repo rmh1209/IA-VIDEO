@@ -53,8 +53,9 @@ concurrentes en s'appuyant sur les avis clients.
 - [x] Bilan du mois automatique dans Progrès (séances et volume comparés au mois précédent, points gagnés, plus forte progression, records, navigation par mois)
 - [x] Mensurations : tour de taille noté avec la pesée ; en sèche, une taille qui baisse alors que la balance stagne bloque la baisse de calories (perte de gras, muscle gardé)
 - [x] Accessibilité : audit axe-core (WCAG 2.2 AA) de 24 écrans en clair et en sombre ; contrastes corrigés (vert, rouge en mode sombre, jours de récupération), titres hiérarchisés, tableaux défilants atteignables au clavier, focus gardé dans les fenêtres, graphiques et minuteur annoncés aux lecteurs d'écran ; point accessibilité ajouté à la conformité (directive 2019/882, exemption des microentreprises)
-- [ ] Rappels de séance par notification (Web Push, serveur) : à évaluer
-- [ ] Version anglaise : à évaluer
+- [x] Rappels de séance par notification (Web Push) : évalué, reporté. Sur iPhone, les notifications n'arrivent qu'aux applis installées sur l'écran d'accueil ; il faudrait garder sur le serveur l'abonnement aux notifications et l'horaire des séances (données personnelles, accord, politique de confidentialité à revoir), plus des clés VAPID et une tâche planifiée Cloudflare. Les rappels passent déjà par l'agenda du téléphone (fichier .ics, rappel 30 min avant) sans qu'aucune donnée ne quitte le téléphone, et le minuteur de repos sonne, vibre et garde l'écran allumé. À reprendre si les utilisateurs le demandent.
+- [x] Version anglaise : évaluée, reportée. Près de 2 000 textes à traduire et à maintenir (interface, 95 exercices et leurs consignes, cerveau du coach, documents juridiques à adapter), pour un lancement pensé pour la France. Le coach comprend déjà les questions posées en anglais.
+- [x] Sauvegarde (séances perdues : frustration n° 5 des avis) : dans l'appli installée, rappel de sauvegarde après 5 séances puis tous les 30 jours (report de 14 jours possible), date de la dernière sauvegarde dans Offre > Tes données, stockage protégé demandé au navigateur après la première séance enregistrée, conseil d'installation sur iPhone (Safari efface les données d'un site non installé après 7 jours sans visite)
 
 ### 6. Livraison
 - [ ] Rebâtir les paquets, republier les artefacts claude.ai concernés, rapport
@@ -74,3 +75,4 @@ concurrentes en s'appuyant sur les avis clients.
 - 2026-10-04 : bilan du mois ; en-tête du carnet corrigé sur les petits écrans (débordement avec Premium et un palier long).
 - 2026-10-04 : tour de taille dans le suivi du poids, champs avec intitulés visibles ; batterie complète `node test/tout.mjs` : 244 vérifications au vert.
 - 2026-10-04 : accessibilité (audit axe-core, 52 vérifications) ; batterie complète : 296 vérifications au vert.
+- 2026-10-04 : notifications et version anglaise évaluées (reportées, raisons ci-dessus) ; sauvegarde des séances (rappel, stockage protégé). Troisième vague terminée.

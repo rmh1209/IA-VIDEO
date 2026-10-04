@@ -7,7 +7,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const SUITES = [
   "progress-unit.js", "run.js", "poids-agenda-run.js", "e2e.js", "demo-run.js", "stades-run.js", "cycle-run.js",
   "suivi-run.js", "paliers-run.js", "aides-run.js", "superset-run.js", "import-run.js", "partage-run.js", "bilan-run.js",
-  "pwa-run.js", "a11y-run.js", "serveur-unit.mjs", "serveur-api.mjs", "serveur-appli.mjs", "produits-stripe.mjs",
+  "pwa-run.js", "sauvegarde-run.js", "a11y-run.js", "serveur-unit.mjs", "serveur-api.mjs", "serveur-appli.mjs", "produits-stripe.mjs",
 ];
 const pick = process.argv.slice(2);
 const list = pick.length ? SUITES.filter(f => pick.some(p => f.startsWith(p))) : SUITES;

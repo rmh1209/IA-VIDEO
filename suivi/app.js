@@ -574,6 +574,7 @@ function saveFinished() {
   pendingSave = null;
   if (active && active.si != null && program().sessions[active.si]) { rememberSS(active.si); saveProfile(); }
   putWorkout(w);
+  if (storeMode === "local" && persisted !== true && window.FONTE_PWA && window.FONTE_PWA.protect) window.FONTE_PWA.protect().then(v => { persisted = v; });
   active = null; saveActive(); stopRest(); releaseWake(); closeSheet();
   demo = null;
   render();
@@ -720,6 +721,22 @@ function importBanner() {
   try { p = decodeCode(pendingCode); } catch (e) { return ""; }
   return `<div class="banner"><b>Programme Fonte reçu</b><p>${esc(LABEL.goal[p.from.goal])} · ${p.sessions.length} séances · ${esc(LABEL.eq[p.from.eq])}${p.paid ? " · donne droit à −50 % sur Premium" : ""}.${profile.program ? " Il remplacera ton programme actuel." : ""}</p><div class="row"><button type="button" class="primary" data-act="import-pending">Importer ce programme</button><button type="button" class="btn2" data-act="ignore-pending">Ignorer</button></div></div>`;
 }
+/* ===== Sauvegarde : dans l'appli installée, les séances ne sont que sur ce téléphone ===== */
+let persisted = null;
+function backupDue() {
+  const F = window.FONTE_PWA;
+  if (!F || !F.backupInfo || storeMode !== "local" || workouts.length < 5) return false;
+  const b = F.backupInfo(), now = Date.now();
+  return now - (b.le || 0) > 30 * DAY && now > (b.rappel || 0);
+}
+function backupBanner() {
+  if (!backupDue()) return "";
+  const F = window.FONTE_PWA, b = F.backupInfo(), n = workouts.length;
+  return `<div class="banner"><b>Mets tes séances à l'abri</b><p>Tes ${n} séances ne sont enregistrées que sur ce téléphone${b.le ? ` (dernière sauvegarde le ${dateFr(b.le, { day: "numeric", month: "long" })})` : ""}. Télécharge une sauvegarde à garder dans Fichiers, Drive ou tes e-mails : tu pourras la réimporter sur n'importe quel téléphone.${F.apple() && !F.installed() ? " Installe aussi l'appli sur ton écran d'accueil : Safari peut effacer les données d'un site non installé après 7 jours sans visite." : ""}</p><div class="row"><button type="button" class="primary" data-act="backup-now">Sauvegarder</button><button type="button" class="btn2" data-act="backup-later">Plus tard</button></div></div>`;
+}
+function exportBackup() {
+  window.FONTE_PWA.exportAll().then(() => { toast("Sauvegarde téléchargée : garde le fichier en lieu sûr."); render(); }).catch(() => toast("Le téléchargement n'a pas pu se faire."));
+}
 function renderSeance(force) {
   const V = $("#v-seance");
   if (active) { if (force || !V.querySelector(".livehead")) V.innerHTML = liveHTML(); return; }
@@ -728,7 +745,7 @@ function renderSeance(force) {
   const wkStart = weekStart(Date.now());
   const thisWeek = workouts.filter(w => w.startedAt >= wkStart);
   const target = +st.days || P.sessions.length;
-  V.innerHTML = `${importBanner()}
+  V.innerHTML = `${importBanner()}${backupBanner()}
   <section><h1>Ta séance</h1><p class="muted">${P.example ? "Programme d'exemple en attendant ton programme Fonte." : `${esc(LABEL.goal[st.goal])} · ${esc(LABEL.level[st.level])} · ${esc(LABEL.eq[st.eq])}`}</p></section>
   <section class="stats"><div class="stat"><span>Cette semaine</span><b>${thisWeek.length} / ${target}</b></div><div class="stat"><span>Volume semaine</span><b>${f0(thisWeek.reduce((t, w) => t + (w.vol || 0), 0))} kg</b></div><div class="stat"><span>Série en cours</span><b>${streak(workouts, target)} sem.</b></div></section>
   ${homeProgressHTML()}
@@ -924,8 +941,9 @@ function portalLoginHTML() {
 /* tes données : tout est sur ce téléphone ; export (portabilité), sauvegarde, effacement, accord pour le coach */
 function dataHTML() {
   if (!window.FONTE_PWA) return "";
-  const F = window.FONTE_PWA, c = F.consentInfo();
+  const F = window.FONTE_PWA, c = F.consentInfo(), b = F.backupInfo ? F.backupInfo() : {};
   return `<div class="datatools">
+    <p class="small"><b>Sauvegarde</b> : ${b.le ? `dernière le ${dateFr(b.le, { day: "numeric", month: "long", year: "numeric" })}` : "aucune pour l'instant"}.${persisted ? " Stockage protégé sur cet appareil : le navigateur ne l'efface pas pour faire de la place." : ""}</p>
     <p class="small"><b>Coach IA</b> : ${c ? `accord donné le ${dateFr(c.t, { day: "numeric", month: "long", year: "numeric" })}. <button type="button" class="linkbtn" data-act="accord-off">Retirer mon accord</button>` : "pas d'accord donné : le coach ne reçoit rien de toi."}</p>
     <div class="row"><button type="button" class="btn2" data-act="data-export">Télécharger toutes mes données</button><label class="btn2 filebtn">Importer une sauvegarde<input type="file" accept="application/json,.json" id="data-import" hidden></label></div>
     <div class="row"><button type="button" class="btn2 danger" data-act="data-erase">Supprimer toutes mes données de ce téléphone</button></div>
@@ -1149,7 +1167,8 @@ document.addEventListener("click", e => {
     case "portal": openPortal(b); break;
     case "bar": profile.bar = barKg() === 20 ? 15 : barKg() === 15 ? 10 : 20; saveProfile(); if (active) active.ex.forEach((x, k) => refreshAids(k)); toast(`Barre de ${barKg()} kg.`); break;
     case "resilier": window.FONTE_PWA.cancelFlow(); break;
-    case "data-export": window.FONTE_PWA.exportAll().then(() => toast("Tes données sont téléchargées (fichier JSON).")).catch(() => toast("Le téléchargement n'a pas pu se faire.")); break;
+    case "data-export": case "backup-now": exportBackup(); break;
+    case "backup-later": window.FONTE_PWA.backupLater(14); render(); break;
     case "data-erase": openConfirm("Supprimer toutes tes données de ce téléphone : programme, séances, conversations, accord et achats ? Copie d'abord ton code d'accès si tu as acheté quelque chose. C'est définitif.", "Tout supprimer", () => { window.FONTE_PWA.eraseAll(); location.reload(); }); break;
     case "accord-off": window.FONTE_PWA.withdrawConsent(); toast("Accord retiré : le coach ne recevra plus rien de toi."); break;
     case "code-copy": copyAccess(); break;
@@ -1195,5 +1214,6 @@ function boot(d) {
   setView(view);
   initStore();
   initRuntime();
+  if (window.FONTE_PWA && window.FONTE_PWA.persisted) window.FONTE_PWA.persisted().then(v => { persisted = v; if (view === "offre") renderOffre(); });
 }
 if (hot && typeof hot.ready === "function") hot.ready(boot); else boot(hot ? hot.data : null);

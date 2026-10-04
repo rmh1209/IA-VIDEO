@@ -218,12 +218,20 @@
 
   /* ===== Tes données : tout est sur l'appareil ; export (portabilité), import d'une sauvegarde, effacement ===== */
   const localKeys = () => { const out = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^fonte/.test(k)) out.push(k); } } catch (e) { /* stockage bloqué */ } return out.sort(); };
+  const SAUVE = "fonte.sauvegarde";
+  const backupInfo = () => { try { const o = JSON.parse(store.get(SAUVE)); return isObj(o) ? o : {}; } catch (e) { return {}; } };
+  const backupLater = days => store.set(SAUVE, JSON.stringify({ ...backupInfo(), rappel: Date.now() + days * 864e5 }));
   async function exportAll() {
     const donnees = {};
     localKeys().forEach(k => { donnees[k] = store.get(k); });
     const json = JSON.stringify({ appli: "fonte", version: 1, exporte: new Date().toISOString(), donnees }, null, 2);
-    return downloads.save({ filename: `fonte-mes-donnees-${new Date().toISOString().slice(0, 10)}.json`, data: new Blob([json], { type: "application/json" }) });
+    const r = await downloads.save({ filename: `fonte-mes-donnees-${new Date().toISOString().slice(0, 10)}.json`, data: new Blob([json], { type: "application/json" }) });
+    store.set(SAUVE, JSON.stringify({ le: Date.now() }));
+    return r;
   }
+  // stockage persistant : le navigateur ne l'efface plus pour faire de la place
+  async function protect() { try { return navigator.storage && navigator.storage.persist ? (await navigator.storage.persisted()) || (await navigator.storage.persist()) : null; } catch (e) { return null; } }
+  async function persisted() { try { return navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : null; } catch (e) { return null; } }
   async function importAll(file) {
     let o;
     try { o = JSON.parse(await file.text()); } catch (e) { throw fail("invalid_backup"); }
@@ -231,6 +239,7 @@
     if (!entries.length) throw fail("invalid_backup");
     localKeys().forEach(k => store.set(k, null));
     entries.forEach(([k, v]) => store.set(k, v));
+    store.set(SAUVE, JSON.stringify({ le: Date.parse(o.exporte) || Date.now() }));
     return entries.length;
   }
   function eraseAll() { localKeys().forEach(k => store.set(k, null)); }
@@ -391,6 +400,9 @@
     has, buy, portal, restore, refresh, accessCode,
     premiumUntil: () => { const d = info("premium"); return d && d.exp ? d.exp - 3 * 864e5 : 0; },
     cancelSub, cancelInfo, cancelFlow, checkout, consentInfo, needsConsent, consentHTML, withdrawConsent, exportAll, importAll, eraseAll,
+    backupInfo, backupLater, protect, persisted,
+    installed: () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true,
+    apple: () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
     device, save: o => downloads.save(o),
     legalOk: () => config.legal !== false,
     portalLogin: () => config.portail || null
